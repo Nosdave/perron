@@ -1,0 +1,11 @@
+pos,part,recommendation,vendors,qty,unit_eur_low,unit_eur_high
+1,LED panel 64x64 P4 HUB75 256x256mm,Waveshare RGB-Matrix-P4-64x64 or equiv,"kiwi-electronics.com;tinytronics.nl;waveshare.com;amazon.de",3,45,70
+2,Controller Adafruit MatrixPortal S3 (#5778),Adafruit MatrixPortal S3,"eckstein-shop.de;kiwi-electronics.com;adafruit.com",1,27,35
+3,PSU 5V 150W,Meanwell LRS-150-5 (or LRS-200-5),"reichelt.de;conrad.be;tme.eu",1,30,55
+4,Light sensor VEML7700 (#4162),Adafruit VEML7700 STEMMA QT,"kiwi-electronics.com;adafruit.com",1,6,10
+5,Power wiring AWG14-16 + ferrules,red/black + ferrules,"local;amazon.de",1,10,10
+6,Inline fuse 25A 5x20mm + holder,fuse + holder,"amazon.de;conrad.be",1,5,5
+7,HUB75 ribbon cable 2x8 IDC,spare ribbon,"aliexpress;amazon.de",2,3,3
+8,Front dark tinted acrylic 25-40pct,laser cut to size,"snijlab.nl;local laser BXL",1,25,45
+9,Frame solid oak + black alu bezel,CNC/carpenter,"local",1,60,180
+10,Mounting french cleat + cable channel,hidden mount,"hardware store",1,20,20

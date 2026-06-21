@@ -1,0 +1,29 @@
+# Standalone-Fetch: STIB (Belgian Mobility) + iRail (frei). SKELETON – Logik in Phase 2.
+# Doku: ../../docs/05-stib-irail.md
+# STIB nutzt KEIN OAuth2: nur Header  bmc-partner-key: !secret stib_partner_key
+
+http_request:
+  useragent: "ha-diele-board/0.1 (github.com/Nosdave/ha-diele-board)"
+  timeout: 10s
+
+globals:
+  - id: transit_last_ok   # epoch der letzten erfolgreichen Aktualisierung
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+# TODO Phase 2 (Beispiele):
+#  Base: https://api-management-opendata-production.azure-api.net
+#  interval 25s : GET /api/datasets/stibmivb/rt/WaitingTimes/?where=pointid="..."&limit=20
+#                 Header bmc-partner-key: !secret stib_partner_key
+#                 -> results[].passingtimes (JSON-String) -> expectedArrivalTime (ISO), destination.fr
+#                 Punkte: !secret stib_point_tram / !secret stib_point_bus
+#  interval 60s : GET /api/datasets/stibmivb/rt/TravellersInformation/?limit=100 -> Störungen Linie 92/60
+#  interval 60s : GET https://api.irail.be/liveboard/?id=!secret irail_train_station&format=json
+#  -> json::parse_json -> globals/text_sensors fürs Display ; transit_last_ok = now
+#
+# binary_sensor:
+#   - platform: template
+#     id: transit_stale
+#     name: "Diele Transit stale"
+#     lambda: 'return (id(sntp_time).now().timestamp - id(transit_last_ok)) > 180;'

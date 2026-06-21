@@ -1,0 +1,25 @@
+# HUB75-Display (offizielle ESPHome-Plattform `hub75`).
+# SKELETON: einfacher Test-Lambda; echte Widget-Zonen in Phase 2/4.
+# Schlüssel/Doku: ../../docs/03-esphome.md , ../../docs/02-architecture.md
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: 8
+  # TODO Phase 2: Pixel-/Bitmap-Font für besseren Dot-Look; Transit-Icons in esphome/icons/
+
+display:
+  - platform: hub75
+    id: matrix
+    board: adafruit-matrix-portal-s3   # hub75-Preset (Pinmapping)
+    panel_width: 64
+    panel_height: 64
+    layout_cols: 3        # 3 Panels nebeneinander -> 192 breit
+    layout_rows: 1        # -> 64 hoch
+    layout: HORIZONTAL
+    brightness: 96        # Start; zur Laufzeit via hub75.set_brightness
+    bit_depth: 6          # 4-12; in Phase 2 tunen
+    update_interval: 1s   # TODO Phase 2: min_refresh_rate / Flimmern tunen
+    lambda: |-
+      // TODO Phase 2/4: Widget-Zonen (Uhr/Wetter | Tram/Bus | Zug/Waze/Trip/Alert)
+      it.printf(2, 2, id(font_small), "diele-board OK");

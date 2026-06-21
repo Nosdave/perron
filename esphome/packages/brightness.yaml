@@ -1,0 +1,19 @@
+# Adaptive Helligkeit: Lux (VEML7700) gemischt mit HA-Target + Präsenz/Modus.
+# SKELETON – aktiviert in Phase 2 (Sensor) / Phase 4 (Logik). Doku: ../../docs/06-design.md
+
+# TODO Phase 2: VEML7700 am I2C aktivieren (i2c-Block in diele-board.yaml setzen)
+# sensor:
+#   - platform: veml7700
+#     lux:
+#       id: ambient_lux
+#       name: "Diele Lux"
+
+# TODO Phase 4:
+#  interval 5s:
+#    auto target = f(id(ambient_lux).state);                 // Lux -> 0..255
+#    if (id(ha_brightness_target).has_state()) target = min(target, ha_brightness_target);
+#    if (!id(ha_presence).state) target = dim_or_blank_after_timeout;
+#    // mode==night -> sehr dunkel
+#  - hub75.set_brightness:
+#      id: matrix
+#      brightness: !lambda 'return target;'

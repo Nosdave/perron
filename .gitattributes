@@ -1,0 +1,10 @@
+# Repo speichert LF (HA/ESPHome laufen auf Linux); Windows-Checkout darf CRLF haben.
+* text=auto eol=lf
+
+# Binärdateien nicht anfassen
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.bin binary
+*.woff binary
+*.ttf binary

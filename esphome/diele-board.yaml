@@ -1,0 +1,57 @@
+# Diele Departure Board – ESPHome Node (Hauptdatei)
+# SKELETON (Phase 0): Struktur steht; Render-Lambdas & Fetch werden in Phase 2 finalisiert.
+# Doku: ../docs/03-esphome.md
+
+substitutions:
+  name: diele-board
+  friendly_name: "Diele Departure Board"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: adafruit_matrixportal_s3   # PlatformIO-Board-ID; in Phase 2 verifizieren
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap: {}   # Fallback-AP fürs Erst-Setup
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Europe/Brussels
+
+# I2C für VEML7700 (STEMMA QT) – Pins in Phase 2 prüfen (Board-Preset kann sie setzen)
+# i2c:
+#   sda: GPIOxx
+#   scl: GPIOxx
+#   scan: true
+
+# Wiederverwendbare Packages (Inhalte in Phase 2/3)
+packages:
+  display:    !include packages/display.yaml
+  transit:    !include packages/transit.yaml
+  ha_inputs:  !include packages/ha_inputs.yaml
+  brightness: !include packages/brightness.yaml
+
+# Diagnose
+sensor:
+  - platform: uptime
+    name: "${friendly_name} Uptime"
+  - platform: wifi_signal
+    name: "${friendly_name} WiFi"
+    update_interval: 60s

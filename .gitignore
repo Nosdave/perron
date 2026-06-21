@@ -1,0 +1,25 @@
+# --- Secrets (NIE committen) ---
+secrets.yaml
+**/secrets.yaml
+# ... aber die Beispiele schon:
+!**/secrets.yaml.example
+
+# --- ESPHome Build-Artefakte ---
+.esphome/
+**/.esphome/
+*.bin
+*.elf
+
+# --- Python / Tooling ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+.mypy_cache/
+
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

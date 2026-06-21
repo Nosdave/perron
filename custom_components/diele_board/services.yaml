@@ -1,0 +1,18 @@
+show_alert:
+  name: Show alert
+  description: Inject a temporary alert message onto the board (scene.alert).
+  fields:
+    text:
+      name: Text
+      required: true
+      selector:
+        text:
+    level:
+      name: Level
+      default: info
+      selector:
+        select:
+          options:
+            - info
+            - warn
+            - crit

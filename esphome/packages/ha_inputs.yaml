@@ -1,0 +1,23 @@
+# Werte aus HA (HACS-Integration `diele_board`). Entity-Vertrag: ../../docs/02-architecture.md
+# Diese Entities entstehen erst mit der Integration (Phase 3); bis dahin "unknown" – ok.
+
+text_sensor:
+  - platform: homeassistant
+    id: ha_scene
+    entity_id: sensor.diele_board_scene
+    attribute: payload   # volles scene-JSON liegt im Attribut (HA-State = max. 255 Zeichen)
+    # on_value: TODO Phase 4 – scene-JSON parsen & Display-Felder aktualisieren
+    # TODO Phase 2: ESPHome-Text-Sensor-Maximallänge prüfen; sonst pro Zone splitten
+
+binary_sensor:
+  - platform: homeassistant
+    id: ha_presence
+    entity_id: binary_sensor.diele_presence
+  - platform: homeassistant
+    id: ha_power
+    entity_id: switch.diele_board_power
+
+sensor:
+  - platform: homeassistant
+    id: ha_brightness_target
+    entity_id: number.diele_board_brightness

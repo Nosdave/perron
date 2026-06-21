@@ -1,0 +1,60 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Diele Departure Board",
+        "description": "STIB partner key + your stops. See docs/05-stib-irail.md.",
+        "data": {
+          "stib_partner_key": "STIB partner key (bmc-partner-key)",
+          "tram_pointid": "Tram stop pointId",
+          "tram_line": "Tram line",
+          "bus_pointid": "Bus stop pointId",
+          "bus_line": "Bus line",
+          "train_station": "Train station (iRail id)",
+          "train_platform": "Inbound platform (empty = no filter)",
+          "weather_entity": "Weather entity",
+          "presence_entities": "Presence sensors / Diele",
+          "commute_label_1": "Commute 1 label (e.g. a name)",
+          "commute_label_2": "Commute 2 label (e.g. a name)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the STIB API. Check the partner key and tram pointId.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "Diele Departure Board is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Diele Departure Board — settings",
+        "data": {
+          "stib_partner_key": "STIB partner key (bmc-partner-key)",
+          "tram_pointid": "Tram stop pointId",
+          "tram_line": "Tram line",
+          "bus_pointid": "Bus stop pointId",
+          "bus_line": "Bus line",
+          "train_station": "Train station (iRail id)",
+          "train_platform": "Inbound platform (empty = no filter)",
+          "weather_entity": "Weather entity",
+          "presence_entities": "Presence sensors / Diele",
+          "commute_label_1": "Commute 1 label (e.g. a name)",
+          "commute_label_2": "Commute 2 label (e.g. a name)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the STIB API. Check the partner key and tram pointId.",
+      "unknown": "Unexpected error."
+    }
+  },
+  "services": {
+    "show_alert": {
+      "name": "Show alert",
+      "description": "Inject a temporary alert message onto the board."
+    }
+  }
+}

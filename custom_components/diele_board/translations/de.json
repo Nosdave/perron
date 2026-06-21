@@ -1,0 +1,60 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Diele Departure Board",
+        "description": "STIB Partner-Key + deine Haltestellen. Siehe docs/05-stib-irail.md.",
+        "data": {
+          "stib_partner_key": "STIB Partner-Key (bmc-partner-key)",
+          "tram_pointid": "Tram-Haltepunkt (pointId)",
+          "tram_line": "Tram-Linie",
+          "bus_pointid": "Bus-Haltepunkt (pointId)",
+          "bus_line": "Bus-Linie",
+          "train_station": "Bahnhof (iRail-ID)",
+          "train_platform": "Gleis stadteinwärts (leer = kein Filter)",
+          "weather_entity": "Wetter-Entity",
+          "presence_entities": "Präsenz-Sensoren / Diele",
+          "commute_label_1": "Label Pendel 1 (z. B. ein Name)",
+          "commute_label_2": "Label Pendel 2 (z. B. ein Name)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "STIB-API nicht erreichbar. Partner-Key und Tram-pointId prüfen.",
+      "unknown": "Unerwarteter Fehler."
+    },
+    "abort": {
+      "already_configured": "Diele Departure Board ist bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Diele Departure Board — Einstellungen",
+        "data": {
+          "stib_partner_key": "STIB Partner-Key (bmc-partner-key)",
+          "tram_pointid": "Tram-Haltepunkt (pointId)",
+          "tram_line": "Tram-Linie",
+          "bus_pointid": "Bus-Haltepunkt (pointId)",
+          "bus_line": "Bus-Linie",
+          "train_station": "Bahnhof (iRail-ID)",
+          "train_platform": "Gleis stadteinwärts (leer = kein Filter)",
+          "weather_entity": "Wetter-Entity",
+          "presence_entities": "Präsenz-Sensoren / Diele",
+          "commute_label_1": "Label Pendel 1 (z. B. ein Name)",
+          "commute_label_2": "Label Pendel 2 (z. B. ein Name)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "STIB-API nicht erreichbar. Partner-Key und Tram-pointId prüfen.",
+      "unknown": "Unerwarteter Fehler."
+    }
+  },
+  "services": {
+    "show_alert": {
+      "name": "Alert anzeigen",
+      "description": "Eine Meldung auf die Tafel injizieren."
+    }
+  }
+}
