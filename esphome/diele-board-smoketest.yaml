@@ -1,0 +1,86 @@
+# Diele Board – SMOKE TEST (Phase 2, Verkabelung)
+# ==================================================
+# Zweck: Panels EINZELN gegenprüfen, BEVOR der volle Strom + die echte Config drauf geht.
+# Flasht standalone über USB – kein WLAN, kein HA, kein Transit nötig.
+#
+# ANLEITUNG (gestaffelt, so stirbt nichts):
+#   1. PSU auf 5,0–5,1 V justieren (ohne Last), DANN erst Panels anstecken.
+#   2. Nur PANEL 1 anstecken. Unten `layout_cols: 1` lassen. Flashen über USB.
+#      -> Erwartet: weißer Rahmen rundum, große "1" in der Mitte,
+#         oben links drei Blöcke R / G / B (prüft Farbkanäle), unten eine Graustufen-Leiste.
+#   3. Panel 2 dazu (Kette Panel1-OUT -> Panel2-IN). `layout_cols: 2` setzen, neu flashen.
+#      -> Erwartet: "1" | "2", durchgehender Rahmen über beide, eine Naht-Linie dazwischen.
+#   4. Panel 3 dazu. `layout_cols: 3`. -> "1" | "2" | "3", Rahmen über volle 192 px.
+#   5. Erst wenn alles sauber: Helligkeit testweise hochdrehen (brightness unten),
+#      dabei Netzteil/Kabel auf Wärme prüfen. Danach zurück auf die echte diele-board.yaml.
+#
+# Farbkanal-Check: Blöcke müssen in DIESER Reihenfolge ROT, GRÜN, BLAU sein.
+#   Sind sie vertauscht (z. B. Rot<->Blau) -> Panel ist BGR statt RGB; dann in der echten
+#   Config den rgb/bgr-Treiber anpassen (Notiz für Phase 2).
+
+substitutions:
+  name: diele-smoketest
+
+esphome:
+  name: ${name}
+  friendly_name: "Diele Smoke Test"
+
+esp32:
+  board: adafruit_matrixportal_s3
+  framework:
+    type: esp-idf
+
+# USB-Logger reicht für den Smoke-Test. WLAN/OTA bewusst weggelassen (weniger, das schiefgehen kann).
+logger:
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_big
+    size: 28
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: 8
+
+display:
+  - platform: hub75
+    id: matrix
+    board: adafruit-matrix-portal-s3   # Pinmapping des MatrixPortal S3
+    panel_width: 64
+    panel_height: 64
+    layout_cols: 1        # <-- HIER staffeln: 1, dann 2, dann 3
+    layout_rows: 1
+    layout: HORIZONTAL
+    brightness: 50        # ~20 % – bewusst niedrig beim ersten Anschalten (Strom begrenzen)
+    bit_depth: 6
+    update_interval: 1s
+    lambda: |-
+      const int PW = 64;                 // Panelbreite
+      int n = it.get_width() / PW;       // Anzahl erkannter Panels (aus layout_cols)
+      auto RED   = Color(255, 0, 0);
+      auto GREEN = Color(0, 255, 0);
+      auto BLUE  = Color(0, 0, 255);
+      auto WHITE = Color(255, 255, 255);
+      auto GREY  = Color(80, 80, 80);
+
+      it.fill(Color::BLACK);
+
+      // Durchgehender Rahmen über die GESAMTE Breite (prüft Kette + Kanten).
+      it.rectangle(0, 0, it.get_width(), it.get_height(), WHITE);
+
+      for (int i = 0; i < n; i++) {
+        int x0 = i * PW;
+        // Panel-Nummer mittig -> verifiziert Reihenfolge der Kette (1 = ganz links).
+        it.printf(x0 + PW / 2, 32, id(font_big), WHITE, TextAlign::CENTER, "%d", i + 1);
+        // Naht-Linie zwischen den Panels (ausser vor dem ersten).
+        if (i > 0) it.line(x0, 0, x0, it.get_height(), GREY);
+        // Farbkanal-Check: R / G / B Blöcke oben links jedes Panels.
+        it.filled_rectangle(x0 + 3,  3, 8, 8, RED);
+        it.filled_rectangle(x0 + 13, 3, 8, 8, GREEN);
+        it.filled_rectangle(x0 + 23, 3, 8, 8, BLUE);
+      }
+
+      // Graustufen-Leiste unten (prüft bit_depth / gleichmäßige Helligkeit).
+      for (int g = 0; g < it.get_width(); g++) {
+        int v = (g * 255) / it.get_width();
+        it.line(g, it.get_height() - 4, g, it.get_height() - 1, Color(v, v, v));
+      }
