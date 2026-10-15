@@ -1,7 +1,7 @@
 {
   "domain": "diele_board",
   "name": "Diele Departure Board",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "documentation": "https://github.com/Nosdave/ha-diele-board",
   "issue_tracker": "https://github.com/Nosdave/ha-diele-board/issues",
   "codeowners": ["@Nosdave"],

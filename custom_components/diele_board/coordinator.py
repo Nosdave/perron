@@ -41,7 +41,9 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 _UNAVAIL = ("unknown", "unavailable", None, "")
 _PRESENT = ("on", "home", "true", "True", "detected")
-_WAZE_TTL = 300  # seconds — Waze is recomputed at most this often
+_WAZE_TTL = 300  # seconds — Waze is recomputed at most this often (on success)
+# On failure, back off instead of retrying every scan: 5 / 15 / 30 / 60 min.
+_WAZE_FAIL_BACKOFF = (300, 900, 1800, 3600)
 
 
 def _mins_from_iso(iso: str, now) -> int | None:
@@ -72,10 +74,15 @@ class DieleBoardCoordinator(DataUpdateCoordinator):
         # Waze destinations are owned by the text.* helper entities (set at runtime).
         self.destinations: dict[str, str] = {slot: "" for slot in COMMUTE_SLOTS}
         self._waze_cache: dict[str, tuple[Any, str, int | None]] = {}
+        # slot -> (last_fail_ts, consecutive_failures) for negative caching / backoff.
+        self._waze_fail: dict[str, tuple[Any, int]] = {}
         self._manual_alert: dict[str, str] | None = None
 
     def set_destination(self, slot: str, value: str) -> None:
         """Called by the text.* helper entities when their value changes."""
+        if self.destinations.get(slot) != value:
+            # New target: drop any failure backoff so it is tried again at once.
+            self._waze_fail.pop(slot, None)
         self.destinations[slot] = value
 
     def label_for(self, slot: str) -> str:
@@ -222,6 +229,12 @@ class DieleBoardCoordinator(DataUpdateCoordinator):
             return cached
         # Only fall back to a cached value if it belongs to the SAME destination.
         fallback = cached if cached_dest == dest else None
+        # Negative caching: after a failure, don't hammer Waze every scan.
+        fail_ts, fails = self._waze_fail.get(slot, (None, 0))
+        if fail_ts is not None and (now - fail_ts).total_seconds() < _WAZE_FAIL_BACKOFF[
+            min(fails, len(_WAZE_FAIL_BACKOFF)) - 1
+        ]:
+            return fallback
         try:
             from pywaze import route_calculator  # lazy: declared in manifest requirements
 
@@ -230,7 +243,15 @@ class DieleBoardCoordinator(DataUpdateCoordinator):
             if routes:
                 mins = round(routes[0].duration)
                 self._waze_cache[slot] = (now, dest, mins)
+                if fails:
+                    _LOGGER.info(
+                        "diele_board: waze %s recovered after %d failure(s)", slot, fails
+                    )
+                self._waze_fail.pop(slot, None)
                 return mins
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("diele_board: waze %s failed: %s", slot, err)
+            # Log only the first failure at WARNING; the rest at DEBUG to avoid log spam.
+            log = _LOGGER.warning if fails == 0 else _LOGGER.debug
+            log("diele_board: waze %s failed (attempt %d): %s", slot, fails + 1, err)
+        self._waze_fail[slot] = (now, fails + 1)
         return fallback
