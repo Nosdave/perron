@@ -95,7 +95,8 @@ und füllt `transit_fallback` im scene-JSON. (Primärquelle bleibt der ESP selbs
 Namen im Code). Die Adresse trägst du in der HA-UI ein (oder
 per Automation, z. B. Kalender-Trip) — sie bleibt als Entity-State **privat in HA**, nie im Repo. Die
 Fahrzeit berechnet die Integration **intern via `pywaze`** (Origin = HA-Standort `zone.home`) →
-`commute`-Liste. **Kein** separates Waze-Travel-Time-Setup nötig.
+`commute`-Liste (alle ~15 min, Ziel-Koordinaten gecacht). **Kein** separates Waze-Travel-Time-Setup nötig.
+Waze erlaubt ca. **100 Anfragen / 2 h pro öffentlicher IP**, geteilt mit HA-Cores `waze_travel_time`.
 
 **Präsenz:** Eigene Präsenz-Entity(s) im Config-Flow wählen (mehrere = ODER-verknüpft). Tipp: eine
 aggregierte Raum-Präsenz (Template/Bayesian/Bereichs-Belegung) bauen und dort eintragen.

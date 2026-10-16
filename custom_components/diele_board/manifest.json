@@ -1,7 +1,7 @@
 {
   "domain": "diele_board",
   "name": "Diele Departure Board",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "documentation": "https://github.com/Nosdave/ha-diele-board",
   "issue_tracker": "https://github.com/Nosdave/ha-diele-board/issues",
   "codeowners": ["@Nosdave"],
@@ -9,5 +9,5 @@
   "iot_class": "local_polling",
   "integration_type": "service",
   "dependencies": [],
-  "requirements": ["pywaze==1.2.0"]
+  "requirements": ["pywaze>=1.2.4"]
 }

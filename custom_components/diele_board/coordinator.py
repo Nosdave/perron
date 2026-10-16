@@ -14,8 +14,10 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 import homeassistant.util.dt as dt_util
+from pywaze import route_calculator
 
 from .api import IRailClient, StibClient
 from .const import (
@@ -41,7 +43,10 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 _UNAVAIL = ("unknown", "unavailable", None, "")
 _PRESENT = ("on", "home", "true", "True", "detected")
-_WAZE_TTL = 300  # seconds — Waze is recomputed at most this often (on success)
+# Waze allows ~100 requests / 2 h per public IP, shared with HA Core's own
+# waze_travel_time entries. One refresh = one routing request (destination
+# coords are cached), so 2 slots x 15 min = 16 requests / 2 h.
+_WAZE_TTL = 900  # seconds — Waze is recomputed at most this often (on success)
 # On failure, back off instead of retrying every scan: 5 / 15 / 30 / 60 min.
 _WAZE_FAIL_BACKOFF = (300, 900, 1800, 3600)
 
@@ -76,6 +81,8 @@ class DieleBoardCoordinator(DataUpdateCoordinator):
         self._waze_cache: dict[str, tuple[Any, str, int | None]] = {}
         # slot -> (last_fail_ts, consecutive_failures) for negative caching / backoff.
         self._waze_fail: dict[str, tuple[Any, int]] = {}
+        # slot -> (destination text, "lat,lon") so geocoding runs once per destination.
+        self._waze_coords: dict[str, tuple[str, str]] = {}
         self._manual_alert: dict[str, str] | None = None
 
     def set_destination(self, slot: str, value: str) -> None:
@@ -212,7 +219,7 @@ class DieleBoardCoordinator(DataUpdateCoordinator):
         return out
 
     async def _commutes(self, now) -> list[dict[str, Any]]:
-        """Travel time per destination helper, via pywaze (cached ~5 min)."""
+        """Travel time per destination helper, via pywaze (cached ~15 min)."""
         origin = f"{self.hass.config.latitude},{self.hass.config.longitude}"
         out = []
         for slot, dest in self.destinations.items():
@@ -236,10 +243,11 @@ class DieleBoardCoordinator(DataUpdateCoordinator):
         ]:
             return fallback
         try:
-            from pywaze import route_calculator  # lazy: declared in manifest requirements
-
-            async with route_calculator.WazeRouteCalculator() as client:
-                routes = await client.calc_routes(origin, dest)
+            # HA's shared httpx client: no per-call client (blocking cert load) and
+            # never closed by us, hence no ``async with``.
+            client = route_calculator.WazeRouteCalculator(client=get_async_client(self.hass))
+            target = await self._waze_target(client, origin, dest, slot)
+            routes = await client.calc_routes(origin, target)
             if routes:
                 mins = round(routes[0].duration)
                 self._waze_cache[slot] = (now, dest, mins)
@@ -253,5 +261,21 @@ class DieleBoardCoordinator(DataUpdateCoordinator):
             # Log only the first failure at WARNING; the rest at DEBUG to avoid log spam.
             log = _LOGGER.warning if fails == 0 else _LOGGER.debug
             log("diele_board: waze %s failed (attempt %d): %s", slot, fails + 1, err)
+            if "429" in str(err) or "too many" in str(err).lower():
+                # Rate-limited: jump straight to the longest backoff.
+                fails = max(fails, len(_WAZE_FAIL_BACKOFF) - 1)
         self._waze_fail[slot] = (now, fails + 1)
         return fallback
+
+    async def _waze_target(self, client, origin: str, dest: str, slot: str) -> str:
+        """Resolve a destination to "lat,lon" once and reuse it (saves a Waze call)."""
+        cached = self._waze_coords.get(slot)
+        if cached and cached[0] == dest:
+            return cached[1]
+        if client.already_coords(dest):
+            return dest
+        lat, lon = (float(v) for v in origin.split(","))
+        coords = await client.address_to_coords(dest, base_coords={"lat": lat, "lon": lon})
+        target = f"{coords['lat']},{coords['lon']}"
+        self._waze_coords[slot] = (dest, target)
+        return target
