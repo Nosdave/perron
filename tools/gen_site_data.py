@@ -102,7 +102,8 @@ def main():
         json.dump({"generated": time.strftime("%Y-%m-%d"), "colors": colors, "stops": stops}, f,
                   ensure_ascii=False, separators=(",", ":"))
     st = get_json("https://api.irail.be/v1/stations/?format=json&lang=en")
-    stations = [{"id": x["id"], "name": x.get("standardname") or x["name"],
+    # "name" is bilingual in Brussels ("Brussel-Centraal / Bruxelles-Central") -> searchable in FR and NL
+    stations = [{"id": x["id"], "name": x.get("name") or x.get("standardname"),
                  "lat": round(float(x["locationY"]), 5), "lon": round(float(x["locationX"]), 5)}
                 for x in st["station"] if x["id"].startswith("BE.NMBS.0088")]
     with open(os.path.join(OUT, "stations.json"), "w", encoding="utf-8") as f:
