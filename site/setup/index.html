@@ -81,8 +81,9 @@
   };
 
   async function load() {
-    const [s, t] = await Promise.all([fetch("../data/stops.json").then(r => r.json()),
-                                      fetch("../data/stations.json").then(r => r.json())]);
+    // revalidate (cheap 304) so updated stop data is picked up without stale browser caches
+    const get = (u) => fetch(u, { cache: "no-cache" }).then(r => r.json());
+    const [s, t] = await Promise.all([get("../data/stops.json"), get("../data/stations.json")]);
     STOPS = s.stops; COLORS = s.colors; STATIONS = t.stations;
   }
 
@@ -145,11 +146,13 @@
     renderStations(STATIONS.map(s => [dist(here, s), s]).sort((a, b) => a[0] - b[0]).slice(0, 3).map(x => x[1]));
   }
 
+  // accent- and punctuation-insensitive: "thevenet" finds "Thévenet", "st job" finds "Saint-Job"
+  const norm = (x) => x.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[-'’.]/g, " ").replace(/\s+/g, " ");
   function search(q) {
-    q = q.trim().toLowerCase();
+    q = norm(q.trim());
     if (q.length < 2) { if (here) nearby(); return; }
-    renderStops(STOPS.filter(s => s.fr.toLowerCase().includes(q) || s.nl.toLowerCase().includes(q)).slice(0, 20));
-    renderStations(STATIONS.filter(s => s.name.toLowerCase().includes(q)).slice(0, 5));
+    renderStops(STOPS.filter(s => norm(s.fr).includes(q) || norm(s.nl).includes(q)).slice(0, 20));
+    renderStations(STATIONS.filter(s => norm(s.name).includes(q)).slice(0, 5));
   }
 
   // Walking time = farthest selected platform (80 m/min), until the user moves the slider.
