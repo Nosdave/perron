@@ -87,5 +87,5 @@ DEFAULT_TRAIN_PLATFORM = ""  # e.g. "2" for inbound at a given station; "" = no 
 DEFAULT_WEATHER_ENTITY = ""
 DEFAULT_PRESENCE_ENTITIES: list[str] = []
 
-DEFAULT_SCAN_INTERVAL = 30  # seconds
+DEFAULT_SCAN_INTERVAL = 60  # seconds (STIB rate limit: 1 waiting-times call per cycle)
 PLATFORMS = ["sensor", "number", "switch", "text"]

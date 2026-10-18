@@ -1,57 +1,143 @@
-# Diele Departure Board – ESPHome Node (Hauptdatei)
-# SKELETON (Phase 0): Struktur steht; Render-Lambdas & Fetch werden in Phase 2 finalisiert.
+# Diele Departure Board – ESPHome-Firmware (Hauptdatei)
+# ======================================================
+# STANDALONE-first: läuft komplett ohne Home Assistant.
+#   - Erst-Einrichtung: kein WLAN gespeichert -> Hotspot "Diele-Board" + QR-Code auf der Tafel
+#     -> Handy verbindet sich -> Einrichtungsseite (captive portal) -> eigenes WLAN wählen.
+#   - Einstellungen (STIB-Schlüssel, Haltestellen, Helligkeit): Webseite http://diele-board.local
+#   - Updates: über WLAN (ESPHome/HA) bzw. später automatisch von GitHub.
+#   - Home Assistant ist optional (Extras wie Waze/Präsenz); fällt HA aus, läuft die Tafel weiter.
+#
+# Diese Datei ist ÖFFENTLICH und enthält bewusst KEINE Secrets/Ortsdaten: WLAN, Schlüssel und
+# Haltestellen werden zur Laufzeit am Gerät eingegeben und dort gespeichert.
 # Doku: ../docs/03-esphome.md
 
 substitutions:
   name: diele-board
   friendly_name: "Diele Departure Board"
+  setup_ssid: "Diele-Board"   # kurz halten: steckt im Setup-QR-Code (muss auf 64 px passen)
 
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
+  project:
+    name: nosdave.diele-board
+    version: "0.3.0"
+  includes:
+    - diele/diele_core.h
+    - diele/diele_icons.h
+    - diele/diele_lines.h
+    - diele/diele_render.h
 
 esp32:
   board: adafruit_matrixportal_esp32s3   # verifiziert 18.10. (ESPHome 2026.5)
   framework:
     type: esp-idf
+    advanced:
+      # Volles CA-Bündel: das Standard-"common"-Bündel kennt die CA von app.meteo.be (KMI) nicht.
+      use_full_certificate_bundle: true
+    sdkconfig_options:
+      # TLS-Puffer/RSA-Rechnungen in PSRAM: der interne RAM ist durch die HUB75-DMA-Puffer
+      # (double_buffer) knapp -> sonst MBEDTLS_ERR_MPI_ALLOC_FAILED beim Zertifikatscheck.
+      CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC: y
+
+# MatrixPortal S3 = ESP32-S3 N8R2 -> 2 MB Quad-PSRAM.
+psram:
+  mode: quad
 
 logger:
 
+# Für HA (optional). Ohne Schlüssel, damit dieselbe Firmware für jeden funktioniert;
+# beim Übernehmen in HA/ESPHome kann man einen eigenen Schlüssel setzen.
 api:
-  encryption:
-    key: !secret api_encryption_key
+  reboot_timeout: 0s   # Default 15 min -> ohne HA würde das Board ständig neu starten!
 
 ota:
   - platform: esphome
-    password: !secret ota_password
 
 wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
-  ap: {}   # Fallback-AP fürs Erst-Setup
+  # Keine Zugangsdaten hier: werden über Hotspot/Captive-Portal (oder USB/Improv) eingegeben
+  # und bleiben bei Updates über WLAN erhalten.
+  ap:
+    ssid: ${setup_ssid}   # offen, nur aktiv solange kein WLAN verbunden ist
+  reboot_timeout: 0s      # Default 15 min -> bei WLAN-Ausfall NICHT neu starten
+
+captive_portal:
+
+improv_serial:   # WLAN auch per USB einrichtbar (z. B. web.esphome.io)
+
+web_server:
+  version: 3
+  # Eigene Einrichtungs-Oberfläche (web/setup.js) statt der ESPHome-Standardseite; komplett in
+  # der Firmware, kein CDN -> funktioniert auch ohne Internet.
+  js_url: ""
+  js_include: web/setup.js
+  css_include: web/setup.css
+  ota: false     # kein Firmware-Upload über die (offene) Webseite
+
+dashboard_import:
+  package_import_url: github://Nosdave/ha-diele-board/esphome/diele-board.yaml@main
+  import_full_config: false
 
 time:
   - platform: sntp
     id: sntp_time
     timezone: Europe/Brussels
 
-# I2C für VEML7700 (STEMMA QT) – Pins in Phase 2 prüfen (Board-Preset kann sie setzen)
-# i2c:
-#   sda: GPIOxx
-#   scl: GPIOxx
-#   scan: true
-
-# Wiederverwendbare Packages (Inhalte in Phase 2/3)
 packages:
+  settings:   !include packages/settings.yaml
   display:    !include packages/display.yaml
   transit:    !include packages/transit.yaml
-  ha_inputs:  !include packages/ha_inputs.yaml
-  brightness: !include packages/brightness.yaml
+  light:      !include packages/light.yaml
 
 # Diagnose
 sensor:
+  - platform: debug
+    free:
+      name: "Heap frei"
+      entity_category: diagnostic
+    block:
+      name: "Heap größter Block"
+      entity_category: diagnostic
+    psram:
+      name: "PSRAM frei"
+      entity_category: diagnostic
   - platform: uptime
-    name: "${friendly_name} Uptime"
+    name: "Uptime"
+    entity_category: diagnostic
   - platform: wifi_signal
-    name: "${friendly_name} WiFi"
+    name: "WLAN-Signal"
     update_interval: 60s
+    entity_category: diagnostic
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      id: wifi_ip
+      name: "IP-Adresse"
+      entity_category: diagnostic
+  - platform: template
+    id: data_status
+    name: "Datenstatus"
+    icon: mdi:database-clock
+    entity_category: diagnostic
+    update_interval: 15s
+    lambda: |-
+      auto m = diele::snapshot();
+      uint32_t now = diele::now_epoch();
+      std::string out;
+      for (int i = 0; i < diele::SRC_N; i++) {
+        if (!m.ts[i] && m.err[i].empty()) continue;
+        char b[96];
+        uint32_t a = (m.ts[i] && now >= m.ts[i]) ? now - m.ts[i] : 0;
+        snprintf(b, sizeof(b), "%s%s: %s%s", out.empty() ? "" : " | ", diele::SRC_NAME[i],
+                 m.ts[i] ? (a < 120 ? (std::to_string(a) + "s").c_str() : (std::to_string(a / 60) + "m").c_str()) : "-",
+                 m.err[i].empty() ? "" : (" ! " + m.err[i]).c_str());
+        out += b;
+      }
+      char t[64];
+      snprintf(t, sizeof(t), " | Abfahrten %u+%u | Stack %u", (unsigned) m.deps.size(), (unsigned) m.trains.size(),
+               (unsigned) m.stack_free);
+      return out.empty() ? std::string("warte auf Daten") : out + t;
+
+debug:
+  update_interval: 60s

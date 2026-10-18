@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diele Board – Haltestelle wählen</title>
+<meta name="referrer" content="no-referrer">
+<style>
+  :root { --bg:#0e0e10; --card:#18181c; --line:#2a2a30; --fg:#ffe9cc; --sec:#9a948c; --acc:#ffa000; --ok:#4fd1c5; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:560px; margin:0 auto; padding:16px 16px 120px; }
+  h1 { font-size:22px; margin:8px 0 4px; } h2 { font-size:15px; color:var(--sec); text-transform:uppercase; letter-spacing:.06em; margin:22px 0 8px; }
+  p.lead { color:var(--sec); margin:0 0 14px; }
+  button, .btn { appearance:none; border:0; border-radius:12px; background:var(--acc); color:#1a1000; font-weight:650; font-size:16px; padding:13px 16px; width:100%; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--fg); border:1px solid var(--line); }
+  input[type=search] { width:100%; padding:12px 14px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--fg); font-size:16px; }
+  .row { display:flex; gap:10px; } .row > * { flex:1; }
+  .stop { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; margin:10px 0; }
+  .stop h3 { margin:0 0 2px; font-size:17px; } .stop .meta { color:var(--sec); font-size:13px; margin-bottom:8px; }
+  .chip { display:inline-flex; align-items:center; gap:8px; margin:4px 6px 4px 0; padding:6px 10px 6px 6px; border-radius:10px; border:1px solid var(--line); background:#111114; color:var(--fg); font-size:14px; cursor:pointer; user-select:none; }
+  .chip.on { border-color:var(--acc); background:#2a1d05; }
+  .badge { min-width:30px; height:22px; padding:0 6px; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; }
+  .station { display:flex; justify-content:space-between; align-items:center; }
+  .hint { color:var(--sec); font-size:13px; }
+  .sum { position:fixed; left:0; right:0; bottom:0; background:rgba(14,14,16,.96); border-top:1px solid var(--line); padding:12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .sum .inner { max-width:560px; margin:0 auto; } .sum .txt { color:var(--sec); font-size:13px; margin-bottom:8px; min-height:18px; }
+  .err { color:#ff6a50; } .okmsg { color:var(--ok); }
+  .walk { display:flex; align-items:center; gap:10px; margin-top:8px; } .walk input { flex:1; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Haltestelle wählen</h1>
+  <p class="lead">Dein Standort bleibt auf diesem Handy. An die Tafel gehen nur die gewählten Haltestellen und eine gerundete Position (für Wetter und Warnungen).</p>
+  <div class="row">
+    <button id="gps">📍 Mein Standort</button>
+  </div>
+  <p id="status" class="hint"></p>
+  <input id="q" type="search" placeholder="… oder Haltestelle suchen (z. B. Montgomery)" autocomplete="off">
+
+  <h2>Tram, Bus, Metro</h2>
+  <p class="hint">Tippe die Linien und Richtungen an, die die Tafel zeigen soll.</p>
+  <div id="stops"></div>
+
+  <h2>Zug (SNCB)</h2>
+  <div id="stations"></div>
+
+  <h2>Gehzeit</h2>
+  <div class="walk"><input id="walk" type="range" min="0" max="15" value="3"><b id="walkv">3 min</b></div>
+  <p class="hint">Abfahrten, die du nicht mehr erreichst, blendet die Tafel aus. „Jetzt los" zeigt sie rot.</p>
+</main>
+<div class="sum"><div class="inner">
+  <div id="sum" class="txt">Noch nichts gewählt.</div>
+  <button id="apply" disabled>Auf die Tafel übernehmen</button>
+</div></div>
+
+<script>
+(() => {
+  const qs = new URLSearchParams(location.search);
+  // Return address of the board: only private-network http origins are accepted.
+  const ret = (qs.get("ret") || "").replace(/\/+$/, "");
+  const RET_OK = /^http:\/\/((10|127)\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|[a-z0-9-]+\.local)(:\d+)?$/i.test(ret);
+  const $ = (id) => document.getElementById(id);
+  let STOPS = [], COLORS = {}, STATIONS = [], here = null;
+  const sel = new Map();          // pointid -> Set(lines)
+  let station = null, walk = 3, walkTouched = false;
+
+  const dist = (a, b) => {
+    const dy = (a.lat - b.lat) * 111195, dx = (a.lon - b.lon) * 111195 * Math.cos(a.lat * Math.PI / 180);
+    return Math.hypot(dx, dy);
+  };
+  const badge = (line) => {
+    const c = COLORS[line] || { c: "#5a5a5a", dark: false };
+    const el = document.createElement("span");
+    el.className = "badge";
+    el.textContent = line;
+    if (c.dark) { el.style.border = "2px solid " + c.c; el.style.color = c.c; }   // same rule as the LED board
+    else { el.style.background = c.c; el.style.color = "#fff"; }
+    return el;
+  };
+
+  async function load() {
+    const [s, t] = await Promise.all([fetch("../data/stops.json").then(r => r.json()),
+                                      fetch("../data/stations.json").then(r => r.json())]);
+    STOPS = s.stops; COLORS = s.colors; STATIONS = t.stations;
+  }
+
+  function renderStops(list) {
+    const box = $("stops"); box.innerHTML = "";
+    // group platforms by name
+    const groups = new Map();
+    for (const s of list) {
+      const k = s.fr;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(s);
+    }
+    for (const [name, plats] of groups) {
+      const card = document.createElement("div"); card.className = "stop";
+      const d = here ? Math.round(dist(here, plats[0])) : null;
+      card.innerHTML = `<h3></h3><div class="meta"></div>`;
+      card.querySelector("h3").textContent = name + (plats[0].nl && plats[0].nl !== name ? " · " + plats[0].nl : "");
+      card.querySelector(".meta").textContent = d != null ? `${d} m · ca. ${Math.max(1, Math.round(d / 80))} min zu Fuß` : "";
+      for (const p of plats) {
+        for (const [line, dest] of p.l) {
+          const chip = document.createElement("span"); chip.className = "chip";
+          chip.append(badge(line), document.createTextNode("→ " + dest));
+          const on = () => sel.has(p.id) && sel.get(p.id).has(line);
+          if (on()) chip.classList.add("on");
+          chip.onclick = () => {
+            if (!sel.has(p.id)) sel.set(p.id, new Set());
+            const set = sel.get(p.id);
+            set.has(line) ? set.delete(line) : set.add(line);
+            if (!set.size) sel.delete(p.id);
+            chip.classList.toggle("on", on());
+            autoWalk();
+            summary();
+          };
+          card.append(chip);
+        }
+      }
+      box.append(card);
+    }
+    if (!list.length) box.innerHTML = '<p class="hint">Keine Haltestellen gefunden.</p>';
+  }
+
+  function renderStations(list) {
+    const box = $("stations"); box.innerHTML = "";
+    for (const s of list) {
+      const card = document.createElement("div"); card.className = "stop station";
+      const d = here ? ` · ${(dist(here, s) / 1000).toFixed(1)} km` : "";
+      card.innerHTML = `<div><h3></h3><div class="meta"></div></div><span class="chip">wählen</span>`;
+      card.querySelector("h3").textContent = s.name;
+      card.querySelector(".meta").textContent = "SNCB" + d;
+      const chip = card.querySelector(".chip");
+      if (station && station.id === s.id) { chip.classList.add("on"); chip.textContent = "gewählt"; }
+      chip.onclick = () => { station = (station && station.id === s.id) ? null : s; renderStations(list); summary(); };
+      box.append(card);
+    }
+  }
+
+  function nearby() {
+    const st = STOPS.map(s => [dist(here, s), s]).filter(x => x[0] < 900).sort((a, b) => a[0] - b[0]).slice(0, 14).map(x => x[1]);
+    renderStops(st);
+    renderStations(STATIONS.map(s => [dist(here, s), s]).sort((a, b) => a[0] - b[0]).slice(0, 3).map(x => x[1]));
+  }
+
+  function search(q) {
+    q = q.trim().toLowerCase();
+    if (q.length < 2) { if (here) nearby(); return; }
+    renderStops(STOPS.filter(s => s.fr.toLowerCase().includes(q) || s.nl.toLowerCase().includes(q)).slice(0, 20));
+    renderStations(STATIONS.filter(s => s.name.toLowerCase().includes(q)).slice(0, 5));
+  }
+
+  // Walking time = farthest selected platform (80 m/min), until the user moves the slider.
+  function autoWalk() {
+    if (walkTouched || !here) return;
+    let m = 0;
+    for (const id of sel.keys()) {
+      const s = STOPS.find(x => x.id === id);
+      if (s) m = Math.max(m, Math.round(dist(here, s) / 80));
+    }
+    walk = Math.min(15, m);
+    $("walk").value = walk; $("walkv").textContent = walk + " min";
+  }
+
+  function payload() {
+    // per-platform walking time from the phone position (80 m/min), e.g. "1234:1,2345:5"
+    const points = [...sel.keys()].map(id => {
+      const s = STOPS.find(x => x.id === id);
+      return (here && s) ? `${id}:${Math.max(0, Math.round(dist(here, s) / 80))}` : id;
+    });
+    const lines = [...new Set([...sel.values()].flatMap(s => [...s]))];
+    const p = { v: 1, points: points.join(","), lines: lines.join(","), walk };
+    if (station) p.station = station.id;
+    if (here) p.location = here.lat.toFixed(3) + "," + here.lon.toFixed(3);  // ~100 m: enough for weather/alerts
+    return p;
+  }
+
+  function summary() {
+    const p = payload();
+    const n = sel.size;
+    $("sum").textContent = n || station
+      ? `${n} Bahnsteig(e) · Linien ${p.lines || "–"}${station ? " · Zug: " + station.name : ""} · Gehzeit ${walk} min`
+      : "Noch nichts gewählt.";
+    $("apply").disabled = !(n || station);
+  }
+
+  $("walk").oninput = (e) => { walkTouched = true; walk = +e.target.value; $("walkv").textContent = walk + " min"; summary(); };
+  $("q").oninput = (e) => search(e.target.value);
+  $("gps").onclick = () => {
+    if (!navigator.geolocation) { $("status").textContent = "Standort nicht verfügbar – bitte suchen."; return; }
+    $("status").textContent = "Standort wird bestimmt …";
+    navigator.geolocation.getCurrentPosition(pos => {
+      here = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+      $("status").textContent = `Genauigkeit ca. ${Math.round(pos.coords.accuracy)} m`;
+      nearby();
+    }, err => { $("status").innerHTML = '<span class="err">Kein Standort (' + err.message + ') – bitte suchen.</span>'; },
+       { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+  };
+  $("apply").onclick = () => {
+    const p = payload();
+    if (window.opener && RET_OK) {
+      window.opener.postMessage({ diele: p }, ret);
+      $("sum").innerHTML = '<span class="okmsg">Übernommen. Du kannst dieses Fenster schließen.</span>';
+      setTimeout(() => window.close(), 800);
+    } else if (RET_OK) {
+      const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(p)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      location.href = ret + "/#cfg=" + b64;      // fallback when opener is lost (in-app browsers)
+    } else {
+      $("sum").innerHTML = '<span class="err">Bitte diese Seite über die Einrichtung der Tafel öffnen.</span>';
+    }
+  };
+  load().then(() => { $("status").textContent = "Tippe auf „Mein Standort“ oder suche eine Haltestelle."; })
+        .catch(() => { $("status").innerHTML = '<span class="err">Daten konnten nicht geladen werden.</span>'; });
+})();
+</script>
+</body>
+</html>

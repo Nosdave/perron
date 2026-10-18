@@ -1,0 +1,371 @@
+# Einstellungen – am Gerät gespeichert (NVS). Single source of truth: Web-Einrichtung UND
+# Home Assistant schreiben dieselben Entitäten (letzter Schreibzugriff gewinnt).
+# Absichtlich leer als Default: KEINE Schlüssel/Haltestellen/Orte im öffentlichen Repo.
+
+preferences:
+  flash_write_interval: 5s   # Einstellungen schnell sichern (selten geändert)
+
+# HA-Integration: Infokarten (Kalender, Auto-Pendelzeit, Freitext, Warnungen) ans Board schicken.
+api:
+  actions:
+    - action: push_card
+      variables:
+        key: string     # gleiche key ersetzt die Karte; leere message löscht sie
+        message: string
+        tag: int        # 0 Kalender, 1 Pendeln, 2 Wetter, 3 Störung, 4 Warnung, 5 News, 6 HA
+        prio: int       # 0 = Vollbild-Warnung, 1 hoch .. 3 niedrig
+        ttl: int        # Sekunden, 0 = bis gelöscht
+      then:
+        - lambda: 'diele::push_card(key, message, tag, prio, ttl);'
+    - action: clear_alert
+      then:
+        - lambda: 'diele::clear_ha_alert();'
+
+# STIB-Schlüssel: nur schreibbar. Der Wert liegt in einer gesicherten Gerätevariablen; die
+# Entität meldet nur "gesetzt"/"" -> der Schlüssel landet nie in HA-Verlauf/Recorder.
+globals:
+  - id: g_stib_key
+    type: std::array<char, 65>
+    restore_value: true
+    initial_value: 'std::array<char, 65>{}'
+
+text:
+  - platform: template
+    id: cfg_stib_key
+    name: "STIB API-Schlüssel"
+    icon: mdi:key
+    mode: password
+    max_length: 64
+    entity_category: config
+    update_interval: 60s
+    lambda: 'return std::string(id(g_stib_key)[0] ? "gesetzt" : "");'
+    set_action:
+      - lambda: |-
+          auto &k = id(g_stib_key);
+          k.fill(0);
+          strncpy(k.data(), x.c_str(), k.size() - 1);
+          id(cfg_stib_key).publish_state(k[0] ? "gesetzt" : "");
+  - platform: template
+    id: cfg_stib_points
+    name: "Haltestellen"
+    icon: mdi:bus-stop
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 96
+    entity_category: config
+  - platform: template
+    id: cfg_stib_lines
+    name: "Linienfilter"
+    icon: mdi:filter
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 64
+    entity_category: config
+  - platform: template
+    id: cfg_train_station
+    name: "Bahnhof"
+    icon: mdi:train
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 40
+    entity_category: config
+  - platform: template
+    id: cfg_train_filter
+    name: "Zugfilter"
+    icon: mdi:filter
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 64
+    entity_category: config
+  - platform: template
+    id: cfg_commute_from
+    name: "Pendeln von"
+    icon: mdi:briefcase
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 40
+    entity_category: config
+  - platform: template
+    id: cfg_commute_to
+    name: "Pendeln nach"
+    icon: mdi:briefcase
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 40
+    entity_category: config
+  - platform: template
+    id: cfg_location
+    name: "Standort"
+    icon: mdi:map-marker
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 32
+    entity_category: config
+  - platform: template
+    id: cfg_aliases
+    name: "Kurznamen"
+    icon: mdi:form-textbox
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 200
+    entity_category: config
+  - platform: template
+    id: cfg_night
+    name: "Nachtzeit"
+    icon: mdi:weather-night
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: "23:00-06:00"
+    max_length: 16
+    entity_category: config
+  - platform: template
+    id: cfg_free_text
+    name: "Freitext"
+    icon: mdi:message-text
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 120
+
+select:
+  - platform: template
+    id: cfg_layout
+    name: "Layout"
+    icon: mdi:view-dashboard
+    options: ["Standard (3 Zeilen)", "Groß (2 Zeilen)", "Kompakt (4 Zeilen)"]
+    initial_option: "Standard (3 Zeilen)"
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    id: cfg_lang
+    name: "Sprache"
+    icon: mdi:translate
+    options: ["Deutsch", "Français", "Nederlands", "English"]
+    initial_option: "Deutsch"
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    id: cfg_night_mode
+    name: "Nachtmodus"
+    icon: mdi:weather-night
+    options: ["Aus", "Gedimmt", "Nur Uhr", "Dunkel"]
+    initial_option: "Gedimmt"
+    optimistic: true
+    restore_value: true
+    entity_category: config
+
+number:
+  - platform: template
+    id: cfg_brightness
+    name: "Helligkeit"
+    icon: mdi:brightness-6
+    min_value: 5
+    max_value: 255
+    step: 5
+    optimistic: true
+    restore_value: true
+    initial_value: 60
+    entity_category: config
+  - platform: template
+    id: cfg_brightness_night
+    name: "Helligkeit Nacht"
+    icon: mdi:brightness-4
+    min_value: 2
+    max_value: 120
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 8
+    entity_category: config
+  - platform: template
+    id: cfg_walk
+    name: "Gehzeit zur Haltestelle"
+    icon: mdi:walk
+    unit_of_measurement: min
+    min_value: 0
+    max_value: 15
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 3
+    entity_category: config
+  - platform: template
+    id: cfg_walk_train
+    name: "Gehzeit zum Bahnhof"
+    icon: mdi:train
+    unit_of_measurement: min
+    min_value: 0
+    max_value: 30
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 8
+    entity_category: config
+  - platform: template
+    id: cfg_horizon
+    name: "Vorschau"
+    icon: mdi:clock-end
+    unit_of_measurement: min
+    min_value: 15
+    max_value: 95
+    step: 5
+    optimistic: true
+    restore_value: true
+    initial_value: 60
+    entity_category: config
+  - platform: template
+    id: cfg_dwell
+    name: "Infozeile Wechsel"
+    icon: mdi:timer-sand
+    unit_of_measurement: s
+    min_value: 3
+    max_value: 15
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 6
+    entity_category: config
+
+switch:
+  - platform: template
+    id: sw_weather
+    name: "Wetter (KMI)"
+    icon: mdi:weather-partly-cloudy
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+  - platform: template
+    id: sw_bealert
+    name: "BE-Alert"
+    icon: mdi:alarm-light
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+  - platform: template
+    id: sw_disruptions
+    name: "STIB-Störungen"
+    icon: mdi:alert
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+  - platform: template
+    id: sw_news
+    name: "Schlagzeilen"
+    icon: mdi:newspaper
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+  - platform: template
+    id: sw_second
+    name: "Zweite Abfahrt"
+    icon: mdi:numeric-2-box
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+  - platform: template
+    id: sw_status
+    name: "Statusleiste"
+    icon: mdi:page-layout-header
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+  - platform: template
+    id: sw_pager
+    name: "Infozeile"
+    icon: mdi:page-layout-footer
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+  - platform: template
+    id: sw_free
+    name: "Freitext anzeigen"
+    icon: mdi:message-text
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+
+# Einstellungen -> Datenschicht/Renderer übernehmen (alle 2 s; Änderungen lösen Neuabruf aus).
+interval:
+  - interval: 2s
+    then:
+      - lambda: |-
+          diele::Config c;
+          static const char *LANGS[] = {"de", "fr", "nl", "en"};
+          auto li = id(cfg_lang).active_index();
+          c.lang = LANGS[li.has_value() ? *li : 0];   // STIB falls back to fr/nl itself
+          c.stib_key = std::string(id(g_stib_key).data());
+          c.stib_points = id(cfg_stib_points).state;
+          c.stib_lines = id(cfg_stib_lines).state;
+          c.train_station = id(cfg_train_station).state;
+          c.train_filter = id(cfg_train_filter).state;
+          c.commute_from = id(cfg_commute_from).state;
+          c.commute_to = id(cfg_commute_to).state;
+          float la, lo;
+          if (sscanf(id(cfg_location).state.c_str(), "%f,%f", &la, &lo) == 2 && la > 49 && la < 52 && lo > 2 && lo < 7) {
+            c.lat = la; c.lon = lo;
+          }
+          c.weather_on = id(sw_weather).state;
+          c.bealert_on = id(sw_bealert).state;
+          c.disruptions_on = id(sw_disruptions).state;
+          c.news_on = id(sw_news).state;
+          diele::set_config(c);
+
+          diele::Look &L = diele::look();
+          auto lay = id(cfg_layout).active_index();
+          L.layout = (diele::Layout) (lay.has_value() ? *lay : 0);
+          L.ui_lang = LANGS[li.has_value() ? *li : 0];
+          auto nm = id(cfg_night_mode).active_index();
+          L.night = (diele::NightMode) (nm.has_value() ? *nm : 1);
+          int h1, m1, h2, m2;
+          if (sscanf(id(cfg_night).state.c_str(), "%d:%d-%d:%d", &h1, &m1, &h2, &m2) == 4) {
+            L.night_from = h1 * 60 + m1; L.night_to = h2 * 60 + m2;
+          }
+          L.walk_min = (int) id(cfg_walk).state;
+          L.walk_train_min = (int) id(cfg_walk_train).state;
+          L.horizon_min = (int) id(cfg_horizon).state;
+          L.dwell_s = (int) id(cfg_dwell).state;
+          L.second = id(sw_second).state;
+          L.status_bar = id(sw_status).state;
+          L.pager = id(sw_pager).state;
+          L.free_on = id(sw_free).state;
+          L.free_text = id(cfg_free_text).state;
+          L.aliases = id(cfg_aliases).state;
+          L.points = id(cfg_stib_points).state;
+          L.version++;
+          diele::start();
+
+          // Helligkeit: Nachtfenster -> "Helligkeit Nacht". Tagsüber mit Lichtsensor logarithmisch
+          // zwischen "Helligkeit Nacht" (dunkel, <1 lx) und "Helligkeit" (hell, >=300 lx), geglättet.
+          bool night = diele::in_night(L, id(sntp_time).now());
+          float b_lo = id(cfg_brightness_night).state, b_hi = id(cfg_brightness).state;
+          float target = night ? b_lo : b_hi;
+          if (!night && id(sw_auto_bright).state && id(ambient_lux).has_state() && !std::isnan(id(ambient_lux).state)) {
+            float lux = std::max(0.0f, id(ambient_lux).state);
+            float k = std::min(1.0f, std::log10(lux + 1.0f) / std::log10(301.0f));
+            target = b_lo + (b_hi - b_lo) * k;
+          }
+          static float smooth = -1;
+          smooth = smooth < 0 ? target : smooth + (target - smooth) * 0.35f;
+          static int last_b = -1;
+          int b = (int) lroundf(smooth);
+          if (abs(b - last_b) >= 2 || (last_b != b && (b <= 10 || night))) { id(matrix).set_brightness(b); last_b = b; }

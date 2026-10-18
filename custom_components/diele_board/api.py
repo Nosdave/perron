@@ -57,9 +57,21 @@ class StibClient:
 
     async def waiting_times(self, pointid: str) -> list[dict[str, Any]]:
         """Return [{line, dest, eta(iso)}] for one stop point."""
-        data = await self._get(STIB_WAITING_TIMES, {"where": f'pointid="{pointid}"', "limit": 20})
-        out: list[dict[str, Any]] = []
+        return (await self.waiting_times_multi([pointid])).get(pointid, [])
+
+    async def waiting_times_multi(self, pointids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """All stop points in ONE request (`pointid in (...)`) -> {pointid: [{line, dest, eta}]}.
+
+        The Belgian Mobility API is rate limited per key; one call per cycle instead of one per stop.
+        """
+        ids = [p for p in dict.fromkeys(pointids) if p]
+        if not ids:
+            return {}
+        where = "pointid in (" + ",".join(f'"{p}"' for p in ids) + ")"
+        data = await self._get(STIB_WAITING_TIMES, {"where": where, "limit": 20 * len(ids)})
+        out: dict[str, list[dict[str, Any]]] = {p: [] for p in ids}
         for rec in data.get("results", []):
+            point = str(rec.get("pointid", ""))
             line = str(rec.get("lineid", ""))
             try:
                 times = json.loads(rec.get("passingtimes") or "[]")
@@ -69,7 +81,9 @@ class StibClient:
                 eta = ti.get("expectedArrivalTime")
                 dest = (ti.get("destination") or {})
                 if eta:
-                    out.append({"line": line, "dest": dest.get("fr") or dest.get("nl") or "?", "eta": eta})
+                    out.setdefault(point, []).append(
+                        {"line": line, "dest": dest.get("fr") or dest.get("nl") or "?", "eta": eta}
+                    )
         return out
 
     async def disruptions(self) -> list[dict[str, Any]]:
