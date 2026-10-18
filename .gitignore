@@ -23,3 +23,8 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# --- Mockup-Tool: Renderings + konvertierte Bitmap-Fonts (werden erzeugt) ---
+tools/mockup/out/
+tools/mockup/fonts/*.pil
+tools/mockup/fonts/*.pbm

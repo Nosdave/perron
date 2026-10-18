@@ -1,0 +1,30 @@
+:root{--bg:#0e0e10;--card:#18181c;--line:#2a2a30;--fg:#ffe9cc;--sec:#9a948c;--acc:#ffa000;--ok:#4fd1c5}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+esp-app{display:none}
+header{display:flex;justify-content:space-between;align-items:baseline;max-width:600px;margin:0 auto;padding:18px 16px 6px}
+.logo{font:700 20px ui-monospace,Menlo,Consolas,monospace;letter-spacing:.12em;color:var(--acc)}
+.logo span{color:var(--fg);margin-left:.4em}
+.sub{color:var(--sec);font-size:13px}
+main{max-width:600px;margin:0 auto;padding:0 16px 96px}
+nav{display:flex;gap:6px;overflow-x:auto;padding:8px 0 14px;scrollbar-width:none}
+nav button{flex:0 0 auto;background:var(--card);color:var(--sec);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font-size:14px;cursor:pointer}
+nav button.on{color:#1a1000;background:var(--acc);border-color:var(--acc)}
+section{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+.lead{color:var(--sec);margin:0 0 14px}
+.hint,small{color:var(--sec);font-size:13px;display:block;margin-top:4px}
+label.f{display:block;margin:14px 0}
+label.f>span{display:block;font-size:14px;margin-bottom:6px}
+input[type=text],input[type=password],select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:#111114;color:var(--fg);font-size:16px}
+input[type=range]{width:100%;accent-color:var(--acc)}
+label.t{display:flex;gap:12px;align-items:flex-start;margin:12px 0;cursor:pointer}
+label.t input{width:22px;height:22px;accent-color:var(--acc);margin-top:1px}
+button.primary{width:100%;background:var(--acc);color:#1a1000;border:0;border-radius:12px;padding:13px;font-size:16px;font-weight:650;cursor:pointer}
+button.ghost{background:transparent;color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:12px 18px;font-size:16px;cursor:pointer}
+.foot{display:flex;justify-content:space-between;gap:10px;margin-top:16px}
+.foot button.primary{width:auto;padding:12px 26px}
+details{margin:14px 0;border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;color:var(--sec)}
+.saved{outline:2px solid var(--ok);outline-offset:2px;transition:outline-color .6s}
+pre.status{background:#0b0b0d;border:1px solid var(--line);border-radius:10px;padding:12px;white-space:pre-wrap;font-size:14px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ok);color:#042;padding:10px 16px;border-radius:999px;font-weight:600}

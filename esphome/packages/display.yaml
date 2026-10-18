@@ -1,36 +1,117 @@
-# HUB75-Display (offizielle ESPHome-Plattform `hub75`).
-# SKELETON: einfacher Test-Lambda; echte Widget-Zonen in Phase 2/4.
-# Schlüssel/Doku: ../../docs/03-esphome.md , ../../docs/02-architecture.md
+# HUB75-Display: 3x 64x64 P4 -> 192x64. Renderer: ../diele/diele_render.h (Port der Mockups
+# tools/mockup/scenes.py, Iteration 5). Bildschirme:
+#   SETUP        – Hotspot aktiv, kein WLAN: QR-Code (WLAN-Beitritt) + Anleitung
+#   VERBINDEN    – WLAN gespeichert, (noch) nicht verbunden
+#   EINRICHTEN   – im WLAN, aber keine Haltestelle/kein Bahnhof: QR-Code zur Einstellungsseite
+#   NORMAL       – Statusleiste | Abfahrten | Infozeile ; Warnungen übernehmen den Bildschirm
 
 font:
-  - file: "gfonts://Roboto"
-    id: font_small
-    size: 8
-  # TODO Phase 2: Pixel-/Bitmap-Font für besseren Dot-Look; Transit-Icons in esphome/icons/
+  # X11 misc-fixed Bitmapschriften (gemeinfrei), siehe ../fonts/README.md
+  - file: "fonts/5x7.bdf"
+    id: f_small
+    glyphsets: [GF_Latin_Core]
+    ignore_missing_glyphs: true
+  - file: "fonts/6x10.bdf"
+    id: f_mid
+    glyphsets: [GF_Latin_Core]
+    ignore_missing_glyphs: true
+  - file: "fonts/9x15B.bdf"
+    id: f_big
+    glyphs: " +-0123456789:'°X"
+  - file: "fonts/10x20.bdf"
+    id: f_clock
+    glyphs: " +-0123456789:'°X"
+
+qr_code:
+  # Setup: verbindet das Handy mit dem Hotspot (danach öffnet sich das Captive-Portal).
+  # 29 Zeichen -> QR-Version 2 (25x25) -> scale 2 = 50 px + 7 px Rand auf 64 px.
+  - id: setup_qr
+    value: "WIFI:T:nopass;S:${setup_ssid};;"
+    ecc: LOW
+  # Link zur Einstellungsseite (http://<IP>/), zur Laufzeit gesetzt (max. 23 Zeichen).
+  - id: settings_qr
+    value: "http://0.0.0.0/"
+    ecc: LOW
 
 display:
   - platform: hub75
     id: matrix
-    board: adafruit-matrix-portal-s3   # hub75-Preset (Pinmapping)
+    board: adafruit-matrix-portal-s3
     panel_width: 64
     panel_height: 64
-    layout_cols: 3        # 3 Panels nebeneinander -> 192 breit
-    layout_rows: 1        # -> 64 hoch
+    layout_cols: 3
+    layout_rows: 1
     layout: HORIZONTAL
-    brightness: 96        # Start; zur Laufzeit via hub75.set_brightness
-    bit_depth: 6          # 4-12; in Phase 2 tunen
-    # Panel-Refresh und Neuzeichnen entkoppelt (Smoke-Test 18.10.):
-    # update_interval koppelt sonst die Refresh-Rate an (1s -> 40 Hz Flackern,
-    # 16ms ohne double_buffer -> Schwarz-Blitz bei jedem Neuzeichnen).
-    update_interval: never  # Neuzeichnen per interval unten
-    min_refresh_rate: 100   # Panels fest mit >=100 Hz ansteuern
-    double_buffer: true     # im Hintergrund zeichnen, dann umschalten
+    brightness: 60
+    bit_depth: 6
+    # Panel-Refresh und Neuzeichnen entkoppelt (Smoke-Test 18.10.): sonst 40 Hz Flackern
+    # (update_interval 1s) bzw. Schwarz-Blitz beim Neuzeichnen (ohne double_buffer).
+    update_interval: never
+    min_refresh_rate: 100
+    double_buffer: true
     lambda: |-
-      // TODO Phase 2/4: Widget-Zonen (Uhr/Wetter | Tram/Bus | Zug/Waze/Trip/Alert)
-      it.printf(2, 2, id(font_small), "diele-board OK");
+      const auto WHITE = Color(255, 255, 255);
+      const auto DIM   = Color(120, 120, 120);
+      const auto AMBER = Color(255, 150, 0);
+      static const diele::Fonts F{id(f_small), id(f_mid), id(f_big), id(f_clock)};
+      it.fill(Color::BLACK);
 
-# Inhalt 1x pro Sekunde neu zeichnen (Uhr), unabhängig vom Panel-Refresh.
+      auto *wifi = wifi::global_wifi_component;
+      const bool connected = wifi->is_connected();
+
+      // ---------- SETUP: Hotspot offen, kein WLAN ----------
+      if (!connected && wifi->is_ap_active()) {
+        const int scale = 2;
+        const int qs = id(setup_qr).get_size() * scale;
+        // Heller Grund + Ruhezone. Volles Weiß scannt besser als gedimmt (getestet, ca. 2 m).
+        it.filled_rectangle(0, 0, 64, 64, WHITE);
+        it.qr_code((64 - qs) / 2, (64 - qs) / 2, id(setup_qr), Color::BLACK, scale);
+        const int x = 70;
+        diele::txt(it, F, F.mid,   x,  2, "WLAN einrichten", AMBER);
+        diele::txt(it, F, F.small, x, 15, "QR-Code scannen", WHITE);
+        diele::txt(it, F, F.small, x, 25, "oder WLAN", DIM);
+        diele::txt(it, F, F.small, x, 35, "\"${setup_ssid}\" wählen", WHITE);
+        diele::txt(it, F, F.small, x, 46, "Seite öffnet nicht?", DIM);
+        diele::txt(it, F, F.small, x, 56, "192.168.4.1", WHITE);
+        return;
+      }
+
+      // ---------- VERBINDEN ----------
+      if (!connected) {
+        diele::txt(it, F, F.mid, 96, 28, "Verbinde mit WLAN ...", AMBER, 1);
+        return;
+      }
+
+      // ---------- EINRICHTEN: noch keine Haltestelle / kein Bahnhof ----------
+      const bool configured = !id(cfg_stib_points).state.empty() || !id(cfg_train_station).state.empty();
+      if (!configured) {
+        const std::string ip = id(wifi_ip).has_state() ? id(wifi_ip).state : "";
+        static std::string qr_ip;
+        if (!ip.empty() && ip != qr_ip) {
+          id(settings_qr).set_value("http://" + ip + "/");
+          qr_ip = ip;
+        }
+        if (!qr_ip.empty()) {
+          const int scale = 2;
+          const int qs = id(settings_qr).get_size() * scale;
+          it.filled_rectangle(0, 0, 64, 64, WHITE);
+          it.qr_code((64 - qs) / 2, (64 - qs) / 2, id(settings_qr), Color::BLACK, scale);
+        }
+        const int x = 70;
+        diele::txt(it, F, F.mid,   x,  2, "Einrichtung", AMBER);
+        diele::txt(it, F, F.small, x, 15, "QR-Code scannen", WHITE);
+        diele::txt(it, F, F.small, x, 25, "oder im Browser:", DIM);
+        diele::txt(it, F, F.small, x, 35, ip, WHITE);
+        diele::txt(it, F, F.small, x, 46, "Haltestelle und", DIM);
+        diele::txt(it, F, F.small, x, 56, "Linien wählen", DIM);
+        return;
+      }
+
+      // ---------- NORMAL ----------
+      diele::render(it, F, diele::look(), id(sntp_time).now());
+
+# 20 fps: Infozeilen-Laufschrift, "fährt ein"-Pfeile. Panel-Refresh (100 Hz) läuft per DMA.
 interval:
-  - interval: 1s
+  - interval: 50ms
     then:
       - component.update: matrix

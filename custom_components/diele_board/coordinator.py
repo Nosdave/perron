@@ -49,6 +49,7 @@ _PRESENT = ("on", "home", "true", "True", "detected")
 _WAZE_TTL = 900  # seconds — Waze is recomputed at most this often (on success)
 # On failure, back off instead of retrying every scan: 5 / 15 / 30 / 60 min.
 _WAZE_FAIL_BACKOFF = (300, 900, 1800, 3600)
+_DISRUPTIONS_TTL = 600  # seconds — TravellersInformation is ~170 KB and changes rarely
 
 
 def _mins_from_iso(iso: str, now) -> int | None:
@@ -84,6 +85,8 @@ class DieleBoardCoordinator(DataUpdateCoordinator):
         # slot -> (destination text, "lat,lon") so geocoding runs once per destination.
         self._waze_coords: dict[str, tuple[str, str]] = {}
         self._manual_alert: dict[str, str] | None = None
+        self._disruptions: list[dict[str, Any]] = []
+        self._disr_ts = None
 
     def set_destination(self, slot: str, value: str) -> None:
         """Called by the text.* helper entities when their value changes."""
@@ -112,10 +115,16 @@ class DieleBoardCoordinator(DataUpdateCoordinator):
         irail = IRailClient(session)
         now = dt_util.now()
 
-        tram = await self._safe(stib.waiting_times(self._cfg[CONF_TRAM_POINT]), "tram")
-        bus = await self._safe(stib.waiting_times(self._cfg[CONF_BUS_POINT]), "bus")
+        # One STIB request for both stops (rate limit per key), disruptions only every 10 min.
+        tram_pt, bus_pt = self._cfg[CONF_TRAM_POINT], self._cfg[CONF_BUS_POINT]
+        waits = await self._safe(stib.waiting_times_multi([tram_pt, bus_pt]), "stib") or {}
+        tram, bus = waits.get(tram_pt), waits.get(bus_pt)
         train = await self._safe(irail.liveboard(self._cfg[CONF_TRAIN_STATION]), "train")
-        disruptions = await self._safe(stib.disruptions(), "disruptions") or []
+        if self._disr_ts is None or (now - self._disr_ts).total_seconds() >= _DISRUPTIONS_TTL:
+            fresh = await self._safe(stib.disruptions(), "disruptions")
+            if fresh is not None:
+                self._disruptions, self._disr_ts = fresh, now
+        disruptions = self._disruptions
 
         tram_line = self._cfg.get(CONF_TRAM_LINE, DEFAULT_TRAM_LINE)
         bus_line = self._cfg.get(CONF_BUS_LINE, DEFAULT_BUS_LINE)
