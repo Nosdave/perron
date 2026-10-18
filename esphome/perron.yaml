@@ -1,9 +1,9 @@
-# Diele Departure Board – ESPHome-Firmware (Hauptdatei)
+# Perron – ESPHome-Firmware (Hauptdatei)
 # ======================================================
 # STANDALONE-first: läuft komplett ohne Home Assistant.
-#   - Erst-Einrichtung: kein WLAN gespeichert -> Hotspot "Diele-Board" + QR-Code auf der Tafel
+#   - Erst-Einrichtung: kein WLAN gespeichert -> Hotspot "Perron" + QR-Code auf der Tafel
 #     -> Handy verbindet sich -> Einrichtungsseite (captive portal) -> eigenes WLAN wählen.
-#   - Einstellungen (STIB-Schlüssel, Haltestellen, Helligkeit): Webseite http://diele-board.local
+#   - Einstellungen (STIB-Schlüssel, Haltestellen, Helligkeit): Webseite http://perron.local
 #   - Updates: über WLAN (ESPHome/HA) bzw. später automatisch von GitHub.
 #   - Home Assistant ist optional (Extras wie Waze/Präsenz); fällt HA aus, läuft die Tafel weiter.
 #
@@ -12,21 +12,31 @@
 # Doku: ../docs/03-esphome.md
 
 substitutions:
-  name: diele-board
-  friendly_name: "Diele Departure Board"
-  setup_ssid: "Diele-Board"   # kurz halten: steckt im Setup-QR-Code (muss auf 64 px passen)
+  name: perron
+  friendly_name: "Perron"
+  setup_ssid: "Perron"   # kurz halten: steckt im Setup-QR-Code (muss auf 64 px passen)
 
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
   project:
-    name: nosdave.diele-board
-    version: "0.3.0"
+    name: nosdave.perron
+    version: "0.4.0"
+  on_boot:
+    priority: 600
+    then:
+      - lambda: |-
+          perron::groups_boot_blob() = std::string(id(g_groups).data());
+          perron::groups_saver() = [](const std::string &blob) {
+            auto &g = id(g_groups);
+            g.fill(0);
+            strncpy(g.data(), blob.c_str(), g.size() - 1);
+          };
   includes:
-    - diele/diele_core.h
-    - diele/diele_icons.h
-    - diele/diele_lines.h
-    - diele/diele_render.h
+    - perron/perron_core.h
+    - perron/perron_icons.h
+    - perron/perron_lines.h
+    - perron/perron_render.h
 
 esp32:
   board: adafruit_matrixportal_esp32s3   # verifiziert 18.10. (ESPHome 2026.5)
@@ -50,18 +60,22 @@ logger:
 # beim Übernehmen in HA/ESPHome kann man einen eigenen Schlüssel setzen.
 api:
   reboot_timeout: 0s   # Default 15 min -> ohne HA würde das Board ständig neu starten!
+  # Verschlüsselung ohne festen Schlüssel: Home Assistant überträgt beim Einbinden einen
+  # eigenen Schlüssel, die Tafel speichert ihn und spricht danach nur noch verschlüsselt.
+  # So bleibt die öffentliche Firmware frei von Geheimnissen.
+  encryption: {}
 
 ota:
   - platform: esphome
   - platform: http_request   # Updates direkt von GitHub Pages (ohne HA)
 
-# Firmware-Updates: Manifest auf GitHub Pages (gebaut von .github/workflows/pages.yml).
+# Firmware-Updates: Manifest auf GitHub Pages des öffentlichen Verteil-Repos Nosdave/perron.
 # Prüft alle 6 h; installiert automatisch nur nachts (03-05 Uhr), abschaltbar.
 update:
   - platform: http_request
     id: fw_update
     name: "Firmware"
-    source: https://nosdave.github.io/ha-diele-board/firmware/manifest.json
+    source: https://nosdave.github.io/perron/firmware/manifest.json
     update_interval: 6h
 
 wifi:
@@ -83,10 +97,6 @@ web_server:
   js_include: web/setup.js
   css_include: web/setup.css
   ota: false     # kein Firmware-Upload über die (offene) Webseite
-
-dashboard_import:
-  package_import_url: github://Nosdave/ha-diele-board/esphome/diele-board.yaml@main
-  import_full_config: false
 
 time:
   - platform: sntp
@@ -132,14 +142,14 @@ text_sensor:
     entity_category: diagnostic
     update_interval: 15s
     lambda: |-
-      auto m = diele::snapshot();
-      uint32_t now = diele::now_epoch();
+      auto m = perron::snapshot();
+      uint32_t now = perron::now_epoch();
       std::string out;
-      for (int i = 0; i < diele::SRC_N; i++) {
+      for (int i = 0; i < perron::SRC_N; i++) {
         if (!m.ts[i] && m.err[i].empty()) continue;
         char b[96];
         uint32_t a = (m.ts[i] && now >= m.ts[i]) ? now - m.ts[i] : 0;
-        snprintf(b, sizeof(b), "%s%s: %s%s", out.empty() ? "" : " | ", diele::SRC_NAME[i],
+        snprintf(b, sizeof(b), "%s%s: %s%s", out.empty() ? "" : " | ", perron::SRC_NAME[i],
                  m.ts[i] ? (a < 120 ? (std::to_string(a) + "s").c_str() : (std::to_string(a / 60) + "m").c_str()) : "-",
                  m.err[i].empty() ? "" : (" ! " + m.err[i]).c_str());
         out += b;
@@ -151,19 +161,27 @@ text_sensor:
 
   # Abfahrten für Home Assistant (Sprachassistent, Automationen): die Tafel ist der einzige
   # STIB-Abrufer im Haus -> HA liest hier statt selbst zu pollen (API-Limit pro Schlüssel).
-  # JSON: [{"l":"92","d":"Montgomery","m":[6,15]},...]  (max. 255 Zeichen)
+  # JSON: [{"l":"81","d":"Montgomery","m":[6,15]},...]  (max. 255 Zeichen)
   - platform: template
     id: departures_json
     name: "Abfahrten"
     icon: mdi:bus-clock
     update_interval: 30s
+    # [{"l":"81","p":"1234","d":"Montgomery","m":[2,18]},{"l":"71","p":"2345","d":"Delta","m":[],"t":"05:42"}]
+    # l = line, p = STIB platform (pointid, absent for trains), d = destination of the next vehicle
+    # m = Minuten bis zur Abfahrt an der Haltestelle (erreichbare, innerhalb der Vorschau);
+    # t = Uhrzeit der nächsten Abfahrt, wenn sie außerhalb der Vorschau liegt.
     lambda: |-
-      auto &rows = diele::frame().rows;
+      auto &rows = perron::frame().rows;
       std::string o = "[";
       for (size_t i = 0; i < rows.size(); i++) {
-        std::string e = std::string(i ? "," : "") + "{\"l\":\"" + rows[i].line + "\",\"d\":\"" + rows[i].dest + "\",\"m\":[";
+        std::string e = std::string(i ? "," : "") + "{\"l\":\"" + rows[i].line + "\"";
+        if (!rows[i].point.empty()) e += ",\"p\":\"" + rows[i].point + "\"";
+        e += ",\"d\":\"" + rows[i].dest + "\",\"m\":[";
         for (size_t k = 0; k < rows[i].mins.size(); k++) e += (k ? "," : "") + std::to_string(rows[i].mins[k]);
-        e += "]}";
+        e += "]";
+        if (rows[i].mins.empty() && rows[i].next_epoch) e += ",\"t\":\"" + perron::hhmm(rows[i].next_epoch) + "\"";
+        e += "}";
         if (o.size() + e.size() + 1 > 255) break;
         o += e;
       }
@@ -174,9 +192,11 @@ text_sensor:
     icon: mdi:clock-fast
     update_interval: 30s
     lambda: |-
-      auto &rows = diele::frame().rows;
-      if (rows.empty()) return std::string("");
-      return rows[0].line + " " + rows[0].dest + " " + std::to_string(rows[0].mins[0]) + " min";
+      const perron::Row *best = nullptr;
+      for (auto &r : perron::frame().rows)
+        if (!r.mins.empty() && (!best || r.mins[0] < best->mins[0])) best = &r;
+      if (!best) return std::string("");
+      return best->line + " " + best->dest + " " + std::to_string(best->mins[0]) + " min";
 
 debug:
   update_interval: 60s

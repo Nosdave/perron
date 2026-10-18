@@ -1,4 +1,4 @@
-# HUB75-Display: 3x 64x64 P4 -> 192x64. Renderer: ../diele/diele_render.h (Port der Mockups
+# HUB75-Display: 3x 64x64 P4 -> 192x64. Renderer: ../perron/perron_render.h (Port der Mockups
 # tools/mockup/scenes.py, Iteration 5). Bildschirme:
 #   SETUP        – Hotspot aktiv, kein WLAN: QR-Code (WLAN-Beitritt) + Anleitung
 #   VERBINDEN    – WLAN gespeichert, (noch) nicht verbunden
@@ -13,6 +13,10 @@ font:
     ignore_missing_glyphs: true
   - file: "fonts/6x10.bdf"
     id: f_mid
+    glyphsets: [GF_Latin_Core]
+    ignore_missing_glyphs: true
+  - file: "fonts/9x15.bdf"         # große Zielnamen (Layout Premium)
+    id: f_dest
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
   - file: "fonts/9x15B.bdf"
@@ -53,7 +57,7 @@ display:
       const auto WHITE = Color(255, 255, 255);
       const auto DIM   = Color(120, 120, 120);
       const auto AMBER = Color(255, 150, 0);
-      static const diele::Fonts F{id(f_small), id(f_mid), id(f_big), id(f_clock)};
+      static const perron::Fonts F{id(f_small), id(f_mid), id(f_big), id(f_clock), id(f_dest)};
       it.fill(Color::BLACK);
 
       auto *wifi = wifi::global_wifi_component;
@@ -67,18 +71,18 @@ display:
         it.filled_rectangle(0, 0, 64, 64, WHITE);
         it.qr_code((64 - qs) / 2, (64 - qs) / 2, id(setup_qr), Color::BLACK, scale);
         const int x = 70;
-        diele::txt(it, F, F.mid,   x,  2, "WLAN einrichten", AMBER);
-        diele::txt(it, F, F.small, x, 15, "QR-Code scannen", WHITE);
-        diele::txt(it, F, F.small, x, 25, "oder WLAN", DIM);
-        diele::txt(it, F, F.small, x, 35, "\"${setup_ssid}\" wählen", WHITE);
-        diele::txt(it, F, F.small, x, 46, "Seite öffnet nicht?", DIM);
-        diele::txt(it, F, F.small, x, 56, "192.168.4.1", WHITE);
+        perron::txt(it, F, F.mid,   x,  2, "WLAN einrichten", AMBER);
+        perron::txt(it, F, F.small, x, 15, "QR-Code scannen", WHITE);
+        perron::txt(it, F, F.small, x, 25, "oder WLAN", DIM);
+        perron::txt(it, F, F.small, x, 35, "\"${setup_ssid}\" wählen", WHITE);
+        perron::txt(it, F, F.small, x, 46, "Seite öffnet nicht?", DIM);
+        perron::txt(it, F, F.small, x, 56, "192.168.4.1", WHITE);
         return;
       }
 
       // ---------- VERBINDEN ----------
       if (!connected) {
-        diele::txt(it, F, F.mid, 96, 28, "Verbinde mit WLAN ...", AMBER, 1);
+        perron::txt(it, F, F.mid, 96, 28, "Verbinde mit WLAN ...", AMBER, 1);
         return;
       }
 
@@ -98,17 +102,17 @@ display:
           it.qr_code((64 - qs) / 2, (64 - qs) / 2, id(settings_qr), Color::BLACK, scale);
         }
         const int x = 70;
-        diele::txt(it, F, F.mid,   x,  2, "Einrichtung", AMBER);
-        diele::txt(it, F, F.small, x, 15, "QR-Code scannen", WHITE);
-        diele::txt(it, F, F.small, x, 25, "oder im Browser:", DIM);
-        diele::txt(it, F, F.small, x, 35, ip, WHITE);
-        diele::txt(it, F, F.small, x, 46, "Haltestelle und", DIM);
-        diele::txt(it, F, F.small, x, 56, "Linien wählen", DIM);
+        perron::txt(it, F, F.mid,   x,  2, "Einrichtung", AMBER);
+        perron::txt(it, F, F.small, x, 15, "QR-Code scannen", WHITE);
+        perron::txt(it, F, F.small, x, 25, "oder im Browser:", DIM);
+        perron::txt(it, F, F.small, x, 35, ip, WHITE);
+        perron::txt(it, F, F.small, x, 46, "Haltestelle und", DIM);
+        perron::txt(it, F, F.small, x, 56, "Linien wählen", DIM);
         return;
       }
 
       // ---------- NORMAL ----------
-      diele::render(it, F, diele::look(), id(sntp_time).now());
+      perron::render(it, F, perron::look(), id(sntp_time).now());
 
 # 20 fps: Infozeilen-Laufschrift, "fährt ein"-Pfeile. Panel-Refresh (100 Hz) läuft per DMA.
 interval:

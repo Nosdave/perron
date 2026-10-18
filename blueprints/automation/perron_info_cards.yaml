@@ -1,0 +1,136 @@
+blueprint:
+  name: Perron – Infokarten aus Home Assistant
+  description: >-
+    Schickt Fahrzeiten (z. B. Waze-Travel-Time-Sensoren), die nächsten Kalendertermine und
+    einen optionalen Freitext als Infokarten an die Diele-LED-Tafel (ESPHome-Aktion
+    `push_card`). Die Tafel holt Tram, Bus, Zug, Wetter und BE-Alert selbst – diese
+    Blueprint ergänzt nur, was nur Home Assistant weiß.
+  domain: automation
+  source_url: https://github.com/Nosdave/perron/blob/main/blueprints/automation/diele_board_infokarten.yaml
+  input:
+    board_action:
+      name: ESPHome-Aktion der Tafel
+      description: >-
+        Name der Aktion, wie in Entwicklerwerkzeuge → Aktionen angezeigt,
+        z. B. `esphome.perron_push_card`.
+      default: esphome.perron_push_card
+      selector:
+        text: {}
+    commute_sensors:
+      name: Fahrzeit-Sensoren
+      description: Sensoren mit Minuten als Zustand (z. B. Waze Travel Time). Name = Beschriftung auf der Tafel.
+      default: []
+      selector:
+        entity:
+          domain: sensor
+          multiple: true
+    calendars:
+      name: Kalender
+      default: []
+      selector:
+        entity:
+          domain: calendar
+          multiple: true
+    calendar_hours:
+      name: Kalender-Vorschau (Stunden)
+      default: 12
+      selector:
+        number:
+          min: 1
+          max: 72
+          unit_of_measurement: h
+    free_text:
+      name: Freitext-Entität (optional)
+      description: Eine Entität (z. B. input_text), deren Zustand als Infokarte angezeigt wird. Leer = aus.
+      default: ""
+      selector:
+        entity: {}
+
+mode: queued
+max: 3
+
+# Alle 5 min + beim HA-Start (Zustands-Auslöser auf optionale, evtl. leere Eingaben wären ungültig).
+trigger:
+  - platform: time_pattern
+    minutes: "/5"
+  - platform: homeassistant
+    event: start
+
+variables:
+  board_action: !input board_action
+  commute_sensors: !input commute_sensors
+  calendars: !input calendars
+  calendar_hours: !input calendar_hours
+  free_text: !input free_text
+
+action:
+  # 1) Fahrzeiten (Tag 1 = Pendeln). TTL 15 min: wird alle 5 min erneuert.
+  - repeat:
+      for_each: "{{ commute_sensors }}"
+      sequence:
+        - if:
+            - condition: template
+              value_template: "{{ states(repeat.item) | is_number }}"
+          then:
+            - action: "{{ board_action }}"
+              continue_on_error: true
+              data:
+                key: "car:{{ repeat.item }}"
+                message: "{{ state_attr(repeat.item, 'friendly_name') }}: {{ states(repeat.item) | round(0) | int }} min"
+                tag: 1
+                prio: 2
+                ttl: 900
+  # 2) Kalender: nächste zwei Termine (wiederkehrende Termine rechnet HA aus).
+  - if:
+      - condition: template
+        value_template: "{{ calendars | count > 0 }}"
+    then:
+      - action: calendar.get_events
+        target:
+          entity_id: "{{ calendars }}"
+        data:
+          duration:
+            hours: "{{ calendar_hours | int }}"
+        response_variable: cal
+      - variables:
+          upcoming: >-
+            {% set ns = namespace(ev=[]) %}
+            {% for ent, data in cal.items() %}
+              {% for e in data.events %}
+                {% set allday = e.start | length == 10 %}
+                {% set st = (e.start ~ 'T00:00:00') | as_datetime | as_local if allday else e.start | as_datetime | as_local %}
+                {% set en = (e.end | as_datetime | as_local) if not allday else st + timedelta(days=1) %}
+                {% if en > now() %}
+                  {% set ns.ev = ns.ev + [{'ts': st.timestamp(), 'allday': allday, 'text': ('Heute: ' if allday else st.strftime('%H:%M') ~ ' ') ~ e.summary}] %}
+                {% endif %}
+              {% endfor %}
+            {% endfor %}
+            {{ (ns.ev | sort(attribute='ts'))[:2] }}
+      - repeat:
+          count: 2
+          sequence:
+            - variables:
+                ev: "{{ upcoming[repeat.index - 1] if upcoming | count >= repeat.index else none }}"
+            - action: "{{ board_action }}"
+              continue_on_error: true
+              data:
+                key: "cal:{{ repeat.index }}"
+                message: "{{ ev.text if ev else '' }}"
+                tag: 0
+                prio: >-
+                  {{ 1 if ev and not ev.allday and (ev.ts - now().timestamp()) < 3600 else 2 }}
+                ttl: >-
+                  {{ [[(ev.ts - now().timestamp()) | int + 600, 300] | max, 7200] | min if ev and not ev.allday else 3600 }}
+  # 3) Freitext
+  - if:
+      - condition: template
+        value_template: "{{ free_text not in ['', none] }}"
+    then:
+      - action: "{{ board_action }}"
+        continue_on_error: true
+        data:
+          key: free
+          message: "{{ states(free_text) if states(free_text) not in ['unknown', 'unavailable'] else '' }}"
+          tag: 6
+          prio: 3
+          ttl: 0

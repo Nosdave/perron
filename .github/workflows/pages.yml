@@ -1,9 +1,7 @@
-# Baut die Board-Firmware und veröffentlicht sie zusammen mit dem GPS-Einrichtungshelfer auf
-# GitHub Pages:
-#   https://nosdave.github.io/ha-diele-board/setup/            GPS-Helfer (https -> Geolocation)
-#   https://nosdave.github.io/ha-diele-board/data/              Haltestellen/Bahnhöfe (aus GTFS)
-#   https://nosdave.github.io/ha-diele-board/firmware/manifest.json   Firmware-Updates (OTA)
-# Das Board prüft das Manifest alle 6 h und installiert neue Versionen nachts (03-05 Uhr).
+# Builds the firmware and publishes it together with the GPS setup helper on GitHub Pages:
+#   https://nosdave.github.io/perron/setup/                  setup helper (https -> geolocation)
+#   https://nosdave.github.io/perron/data/                   stop/station data (from GTFS)
+#   https://nosdave.github.io/perron/firmware/manifest.json  OTA manifest (checked by devices every 6 h)
 name: Firmware + Pages
 
 on:
@@ -30,10 +28,10 @@ jobs:
         id: esphome
         uses: esphome/build-action@v8.1.0
         with:
-          yaml-file: esphome/diele-board.yaml
+          yaml-file: esphome/perron.yaml
           version: 2026.5.3
           complete-manifest: true
-          release-summary: "Diele Board firmware"
+          release-summary: "Perron firmware"
           release-url: "https://github.com/${{ github.repository }}/commits/${{ github.sha }}"
       - name: Assemble site
         run: |

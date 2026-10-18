@@ -1,4 +1,4 @@
-// Diele Board – standalone data layer (fetchers + model).
+// Perron – standalone data layer (fetchers + model).
 //
 // All network fetches run in ONE background FreeRTOS task, so slow servers never block the
 // ESPHome loop (web UI, API, display). The display side reads a snapshot of the model under a
@@ -37,10 +37,10 @@
 
 #include <ArduinoJson.h>
 
-namespace diele {
+namespace perron {
 
-static const char *const TAG = "diele";
-static const char *const USER_AGENT = "ha-diele-board/0.3 (+https://github.com/Nosdave/ha-diele-board)";
+static const char *const TAG = "perron";
+static const char *const USER_AGENT = "perron/0.4 (+https://github.com/Nosdave/perron)";
 
 // ------------------------------------------------------------------ configuration
 struct Config {
@@ -51,7 +51,7 @@ struct Config {
   std::string train_station;        // iRail id "BE.NMBS.00881xxxx"; empty = off
   std::string train_filter;         // "p2" (platform), S-lines or destination substrings
   std::string commute_from, commute_to;  // iRail station ids for the PT commute; empty = off
-  float lat = 50.846f, lon = 4.352f;  // home position (weather + BE-Alert); default Brussels
+  float lat = 50.846f, lon = 4.352f;  // home position (weather + BE-Alert); default Brussels centre
   bool weather_on = true, bealert_on = true, news_on = false, disruptions_on = true;
   bool any() const { return !stib_points.empty() || !train_station.empty(); }
 };
@@ -63,7 +63,7 @@ static const char *const SRC_NAME[SRC_N] = {"STIB", "Zug", "Wetter", "BE-Alert",
 
 struct Departure {
   std::string point;    // STIB pointid (per-stop walking time)
-  std::string line;     // "92", "60", "S5", "IC"
+  std::string line;     // "81", "71", "S5", "IC"
   std::string dest;     // display form, e.g. "Montgomery"
   uint32_t when = 0;    // epoch (expected, without train delay)
   int16_t delay_s = 0;  // trains: delay in seconds
@@ -78,6 +78,11 @@ struct Weather {
   int ww = 15;
   bool night = false;
   int rain_in_h = -1;        // first hour (0..12) with precipChance >= 60, -1 none
+  // KMI radar nowcast (10-min steps at the home position, mm per 10 min)
+  uint32_t rain_start = 0;   // epoch of the first wet frame from now on (0 = none in window)
+  uint32_t rain_end = 0;     // epoch when it is dry again (0 = beyond the window)
+  float rain_peak = 0;       // max mm/10min in the wet spell
+  bool raining_now = false;
   std::string warning;       // highest CURRENT KMI warning name
   int warning_level = 0;     // 0 none, 1 yellow, 2 orange, 3 red
 };
@@ -328,7 +333,7 @@ inline uint32_t parse_iso(const char *s) {
   return loc > 0 ? (uint32_t) loc : 0;
 }
 
-// UTF-8 aware "MONTGOMERY" -> "Montgomery" (Latin-1 range, enough for BE names).
+// UTF-8 aware "GARE DU MIDI" -> "Gare Du Midi" (Latin-1 range, enough for BE names).
 inline std::string title_case(const std::string &in) {
   std::string out;
   out.reserve(in.size());
@@ -390,7 +395,7 @@ inline std::string url_encode(const std::string &s) {
   return o;
 }
 
-// Value as string/int regardless of whether the API sent "92" or 92.
+// Value as string/int regardless of whether the API sent "81" or 81.
 inline std::string as_str(JsonVariantConst v) {
   if (v.is<const char *>()) return v.as<const char *>();
   if (v.is<long>()) return std::to_string(v.as<long>());
@@ -633,6 +638,8 @@ inline bool fetch_weather(const Config &c) {
   JsonObject fd = filter["for"]["daily"].add<JsonObject>();
   fd["tempMin"] = true; fd["tempMax"] = true;
   filter["for"]["hourly"].add<JsonObject>()["precipChance"] = true;
+  JsonObject fa = filter["animation"]["sequence"].add<JsonObject>();
+  fa["time"] = true; fa["value"] = true;
   JsonObject fw = filter["for"]["warning"].add<JsonObject>();
   fw["warningLevel"] = true; fw["warningType"]["name"] = true; fw["fromTimestamp"] = true; fw["toTimestamp"] = true;
   JsonDocument doc(PsramAllocator::instance());
@@ -659,6 +666,26 @@ inline bool fetch_weather(const Config &c) {
     hr++;
   }
   uint32_t now = now_epoch();
+  // Radar nowcast: frames every 10 min, value = mm/10min at our position. 0.05 mm/10min
+  // (~0.3 mm/h) is the "you notice it" threshold.
+  {
+    const float WET = 0.05f;
+    bool in_spell = false;
+    for (JsonVariantConst f : doc["animation"]["sequence"].as<JsonArrayConst>()) {
+      uint32_t t = parse_iso(f["time"] | (const char *) nullptr);
+      float v = f["value"] | 0.0f;
+      if (!t || t + 600 <= now) continue;  // past frames
+      if (!in_spell && v >= WET && !w.rain_start) {
+        in_spell = true;
+        w.rain_start = t;
+        w.raining_now = t <= now;
+      }
+      if (in_spell) {
+        if (v >= WET) w.rain_peak = std::max(w.rain_peak, v);
+        else { w.rain_end = t; break; }
+      }
+    }
+  }
   std::string lang = (c.lang == "fr" || c.lang == "nl" || c.lang == "de") ? c.lang : "en";
   for (JsonVariantConst x : doc["for"]["warning"].as<JsonArrayConst>()) {
     uint32_t from = parse_iso(x["fromTimestamp"] | (const char *) nullptr);
@@ -846,7 +873,7 @@ inline void start() {
   static bool started = false;
   if (started) return;
   started = true;
-  xTaskCreatePinnedToCore(fetch_task, "diele_fetch", 12288, nullptr, 1, nullptr, 0);
+  xTaskCreatePinnedToCore(fetch_task, "perron_fetch", 12288, nullptr, 1, nullptr, 0);
 }
 
-}  // namespace diele
+}  // namespace perron

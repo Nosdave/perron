@@ -1,4 +1,4 @@
-"""Pixel-exact mockup renderer for the 192x64 Diele board.
+"""Pixel-exact mockup renderer for the 192x64 Perron board.
 
 Draws into a 192x64 RGB framebuffer with the SAME bitmap fonts (X11 misc-fixed BDF, public
 domain) and the SAME icon bitmaps as the firmware, then upscales to an "LED dot" PNG.
@@ -36,6 +36,7 @@ FONTS = {
     "small": (_load_bdf("5x7"), 0),     # caps 6 px, 5 px advance  -> names, labels, minutes
     "mid": (_load_bdf("6x10"), 1),      # caps 7 px, 6 px advance  -> emphasis
     "big": (_load_bdf("9x15B"), 2),     # caps 10 px, 9 px advance -> big minutes / temp
+    "dest": (_load_bdf("9x15"), 2),     # caps 10 px regular -> large destinations (iteration 8)
     "clock": (_load_bdf("10x20"), 3),   # caps 13 px, 10 px advance -> clock
 }
 

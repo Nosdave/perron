@@ -5,7 +5,7 @@
 Writes site/data/stops.json and site/data/stations.json from keyless official sources:
   STIB  official GTFS (stops, trips, stop_times, translations) -> lines + directions per platform
   SNCB  iRail /v1/stations
-Line colours come from esphome/diele/diele_lines.h (generated from GTFS by gen_assets.py).
+Line colours come from esphome/perron/perron_lines.h (generated from GTFS by gen_assets.py).
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "site", "data")
 GTFS_STIB = "https://api-management-discovery-production.azure-api.net/api/gtfs/feed/stibmivb/static"
-UA = {"User-Agent": "ha-diele-board site generator (+https://github.com/Nosdave/ha-diele-board)"}
+UA = {"User-Agent": "ha-perron site generator (+https://github.com/Nosdave/perron)"}
 
 
 def get_json(url, tries=4):
@@ -51,7 +51,7 @@ def gtfs_files(src):
 
 
 def line_colors():
-    p = os.path.join(ROOT, "esphome", "diele", "diele_lines.h")
+    p = os.path.join(ROOT, "esphome", "perron", "perron_lines.h")
     out = {}
     for m in re.finditer(r'\{"([^"]+)", 0x([0-9A-F]{6}), (true|false), (\d)\}', open(p, encoding="utf-8").read()):
         out[m.group(1)] = {"c": "#" + m.group(2), "dark": m.group(3) == "true", "k": int(m.group(4))}
@@ -59,7 +59,7 @@ def line_colors():
 
 
 def title(s: str) -> str:
-    """'MONTGOMERY' -> 'Montgomery', 'MARIUS RENARD' -> 'Marius Renard'."""
+    """'GARE DU MIDI' -> 'Gare Du Midi', 'PORTE DE HAL' -> 'Porte De Hal'."""
     return re.sub(r"(^|[ \-/(])(\w)", lambda m: m.group(1) + m.group(2).upper(), s.lower())
 
 

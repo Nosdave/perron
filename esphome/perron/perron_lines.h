@@ -2,7 +2,7 @@
 // Light lines (brand text black) are drawn as outline badges on LEDs.
 #pragma once
 #include <cstdint>
-namespace diele {
+namespace perron {
 struct LineStyle { const char *name; uint32_t rgb; bool dark_text; uint8_t kind; };
 static const LineStyle LINE_STYLES[] = {
   {"1", 0xB5378C, false, 2},
@@ -128,4 +128,4 @@ static const LineStyle LINE_STYLES[] = {
   {"THA", 0x016AB3, false, 3},
   {"TRN", 0x016AB3, false, 3},
 };
-}  // namespace diele
+}  // namespace perron

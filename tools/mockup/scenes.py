@@ -22,8 +22,8 @@ SEP = (40, 40, 46)
 
 # (bg, fg, shape) per line. Placeholders until verified against STIB GTFS routes.txt.
 LINES = {
-    "81": ((0xE6, 0x00, 0x7E), WHITE, "rect"),
-    "71": ((0x00, 0x8B, 0xCC), WHITE, "round"),
+    "81": ((0x4C, 0x8B, 0x33), WHITE, "rect"),
+    "4": ((0xEA, 0x4F, 0x80), BLACK, "round"),
     "S5": ((0x8D, 0xC6, 0x3F), BLACK, "pill"),
 }
 
@@ -38,7 +38,7 @@ class Dep:
 SAMPLE = [
     Dep("81", "Montgomery", [2, 11]),
     Dep("81", "Marius Renard", [0, 13]),
-    Dep("71", "Gare du Nord", [4, 24]),
+    Dep("4", "Gare du Nord", [4, 24]),
     Dep("S5", "Mechelen", [9]),
 ]
 
@@ -86,7 +86,7 @@ def A3(c: Canvas):
     for d in SAMPLE:
         dep_row(c, 67, 191, y, d)
         y += 13
-    ticker(c, 54, "T92 travaux Marius Renard jusqu'au 30/08", (255, 190, 120), icon="warn")
+    ticker(c, 54, "T92 travaux Mariusco jusqu'au 30/08", (255, 190, 120), icon="warn")
 
 
 # ---------------- B3: slim top bar | 3 full-width rows | ticker ----------------
@@ -100,7 +100,7 @@ def B3(c: Canvas):
     for d in SAMPLE[:3]:
         dep_row(c, 1, 191, y, d)
         y += 13
-    ticker(c, 54, "15:30 Zahnarzt  ·  Arbeit 23 min  ·  Regen ab 17h", (170, 200, 255))
+    ticker(c, 54, "15:30 Meeting  ·  Office 23 min  ·  Rain from 17h", (170, 200, 255))
 
 
 # ---------------- C3: big next departure per direction (glanceable) ----------------
@@ -120,7 +120,7 @@ def C3(c: Canvas):
     c.text(149, 23, "12°", WHITE, font="mid")
     c.text(149, 33, "8/15", DIM)
     c.hline(0, 43, 192, SEP)
-    line_badge(c, 1, 46, "71")
+    line_badge(c, 1, 46, "4")
     c.text(21, 48, "Nord", WHITE)
     c.text(62, 48, "4'", AMBER, align="right")
     line_badge(c, 66, 46, "S5")
@@ -165,8 +165,7 @@ TAGS = {"cal": (0x5A, 0xA0, 0xFF), "commute": (0x4F, 0xD1, 0xC5), "wx": (0xB4, 0
         "ha": (0x41, 0xBD, 0xF5)}
 
 GTFS = {  # route_short_name -> (route_color, route_text_color, mode)   [STIB/SNCB GTFS 2026-10]
-    "81": ((0xE4, 0x3C, 0x2E), WHITE, "tram"),
-    "71": ((0xF2, 0x9D, 0xC3), BLACK, "bus"),
+    "81": ((0x4C, 0x8B, 0x33), WHITE, "tram"),
     "4": ((0xEA, 0x4F, 0x80), BLACK, "tram"),
     "1": ((0xB5, 0x37, 0x8C), WHITE, "metro"),
     "S5": ((0xFF, 0xCD, 0x00), BLACK, "train"),
@@ -282,16 +281,16 @@ def pager(c: Canvas, tag, text):
 def D1(c: Canvas):
     status_bar(c)
     dep_row4(c, 11, "81", "Montgomery", [6, 15], walk=1)
-    dep_row4(c, 25, "71", "Delta", [7, 19], walk=5)
+    dep_row4(c, 25, "4", "Gare du Nord", [7, 19], walk=5)
     dep_row4(c, 39, "S5", "Mechelen", [14], walk=12, delay=3)
-    pager(c, "cal", "15:30 Zahnarzt Dr. Peeters")
+    pager(c, "cal", "15:30 Team meeting")
 
 
 def D1b(c: Canvas):  # same page a few seconds later: tram arriving, bus row, other pager item
     status_bar(c, cond="rainy", temp=11, tmin=8, tmax=13)
     dep_row4(c, 11, "81", "Montgomery", [0, 9])
     dep_row4(c, 25, "81", "Marius Renard", [7, 19])
-    dep_row4(c, 39, "71", "Delta", [4, 24])
+    dep_row4(c, 39, "4", "Gare du Nord", [4, 24])
     pager(c, "wx", "Regen ab 17 Uhr (80 %)")
 
 
@@ -313,9 +312,9 @@ def P0(c: Canvas):  # alert takeover
     c.icon(2, 3, "warn", size=7, tint=WHITE)
     c.text(14, 3, "BE-ALERT", WHITE, font="mid")
     c.text(190, 4, "14:07", (255, 200, 200), align="right")
-    c.text(2, 19, "Brand in Brussels: Fenster und", WARM, font="mid")
-    c.text(2, 31, "Türen schließen, drinnen", WARM, font="mid")
-    c.text(2, 43, "bleiben.", WARM, font="mid")
+    c.text(2, 19, "Brand in der Umgebung: Fenster", WARM, font="mid")
+    c.text(2, 31, "und Türen schließen,", WARM, font="mid")
+    c.text(2, 43, "drinnen bleiben.", WARM, font="mid")
     c.text(190, 56, "1/2", SEC, align="right")
 
 
@@ -331,6 +330,63 @@ def NIGHT(c: Canvas):  # amber only, minimal
 
 
 VARIANTS.update({"D1": D1, "D1b": D1b, "D2": D2, "P0": P0, "NIGHT": NIGHT})
+
+
+
+
+# ======================= Iteration 7: fixed rows, rotating slot, radar rain =======================
+def empty_row(c: Canvas, y, line, dest, t, walk):
+    badge4(c, 1, y + 1, line)
+    c.text(172, y + 4, t, SEC, font="mid", align="right")
+    mw = c.width(t, "mid") + 4
+    wt = walk_tag(c, 172 - mw - 2, y, walk)
+    c.text(27, y + 4, fit_words(c, dest, 172 - mw - wt - 8 - 27, "mid") or "", SEC, font="mid")
+
+
+def dots(c: Canvas, y, n, i):
+    for k in range(n):
+        c.pixel(2 + k * 3, y, WARM if k == i else SEC)
+
+
+def D7a(c: Canvas):
+    status_bar(c, cond="cloudy", temp=11, tmin=8, tmax=13)
+    dep_row4(c, 11, "81", "Montgomery", [3, 16], walk=1)
+    dep_row4(c, 25, "81", "Marius Renard", [22, 26], walk=1)
+    empty_row(c, 39, "4", "Gare du Nord", "05:42", 5)
+    dots(c, 52, 2, 0)
+    pager(c, "wx", "Regen ab 22:40 (leicht), bis ca. 23:30")
+
+
+def D7b(c: Canvas):
+    status_bar(c, cond="cloudy", temp=11, tmin=8, tmax=13)
+    dep_row4(c, 11, "81", "Montgomery", [3, 16], walk=1)
+    dep_row4(c, 25, "81", "Marius Renard", [22, 26], walk=1)
+    dep_row4(c, 39, "S5", "Mechelen", [14], walk=12, delay=3)
+    dots(c, 52, 2, 1)
+    pager(c, "cal", "08:30 Standup  -  15:30 Meeting")
+
+
+def D7c(c: Canvas):  # compact 4 rows (all fixed)
+    status_bar(c, cond="partlycloudy")
+    rows = [("81", "Montgomery", [3, 16], 1), ("81", "Marius Renard", [22, 26], 1), ("4", "Gare du Nord", [7, 19], 5), ("S5", "Mechelen", [14], 12)]
+    for i, (ln, d, m, w) in enumerate(rows):
+        y = 11 + i * 10
+        bg, fg, mode = GTFS[ln]
+        if fg == BLACK:
+            c.rect(1, y, 19, 9, bg); c.rect(2, y + 1, 17, 7, BLACK)
+            c.text(1 + (19 - c.width(ln) + 1) // 2, y + 2, ln, bg)
+        else:
+            c.badge(1, y, ln, bg, fg, shape="pill" if mode == "train" else "round", w=19, h=9)
+        ms = f"{m[0]}'"
+        c.text(172, y + 1, ms, LEAVE if m[0] <= w else CATCH, font="mid", align="right")
+        if len(m) > 1:
+            c.text(191, y + 2, f"{m[1]}'", SEC, align="right")
+        wt = walk_tag(c, 172 - c.width(ms, "mid") - 4, y - 2, w)
+        c.text(23, y + 2, d, WARM)
+    pager(c, "commute", "Arbeit: 23 min mit dem Auto (+4)")
+
+
+VARIANTS.update({"D7a": D7a, "D7b": D7b, "D7c": D7c})
 
 
 if __name__ == "__main__":
