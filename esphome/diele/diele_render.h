@@ -181,8 +181,9 @@ static void icon(Display &it, int x, int y, const char *name, int size, const Co
     for (int i = 0; i < ic->w; i++) {
       char k = ic->px[j * ic->w + i];
       if (k == '.') continue;
+      if (tint) { it.draw_pixel_at(x + i, y + j, *tint); continue; }  // tinted: every lit pixel
       for (auto &p : ICON_PALETTE)
-        if (p.k == k) { it.draw_pixel_at(x + i, y + j, tint ? *tint : Color(p.r, p.g, p.b)); break; }
+        if (p.k == k) { it.draw_pixel_at(x + i, y + j, Color(p.r, p.g, p.b)); break; }
     }
 }
 
@@ -481,7 +482,8 @@ static int walk_tag(Display &it, const Fonts &F, int x_right, int y, int walk) {
   std::string t = std::to_string(walk);
   int tw = text_w(F.small, t);
   txt(it, F, F.small, x_right, y + 4, t, C_SEC, 2);
-  icon(it, x_right - tw - 6, y + 3, "walk", 7, &C_SEC);
+  static const Color C_WALK(0x9A, 0x94, 0x8C);  // a bit brighter than C_SEC: 5x7 glyph must survive dimming
+  icon(it, x_right - tw - 6, y + 3, "walk", 7, &C_WALK);
   return tw + 6;
 }
 
