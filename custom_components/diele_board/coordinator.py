@@ -22,6 +22,11 @@ from pywaze import route_calculator
 from .api import IRailClient, StibClient
 from .const import (
     COMMUTE_SLOTS,
+    CONF_BOARD_NODE,
+    CONF_CALENDAR_HOURS,
+    CONF_CALENDARS,
+    CONF_STIB_POLLING,
+    DEFAULT_CALENDAR_HOURS,
     CONF_BUS_LINE,
     CONF_BUS_POINT,
     CONF_PARTNER_KEY,
@@ -87,6 +92,7 @@ class DieleBoardCoordinator(DataUpdateCoordinator):
         self._manual_alert: dict[str, str] | None = None
         self._disruptions: list[dict[str, Any]] = []
         self._disr_ts = None
+        self._pushed: dict[str, tuple[tuple[str, int], float]] = {}  # key -> ((msg, prio), sent_ts)
 
     def set_destination(self, slot: str, value: str) -> None:
         """Called by the text.* helper entities when their value changes."""
@@ -102,6 +108,88 @@ class DieleBoardCoordinator(DataUpdateCoordinator):
         """Service-driven alert; empty text clears it."""
         self._manual_alert = {"text": text, "level": level} if text else None
 
+    # ------------------------------------------------------------ push to the LED board
+    async def _calendar_events(self, now) -> list[tuple[Any, str, bool]]:
+        """Next events from the configured HA calendars: [(start, summary, all_day)], sorted.
+
+        Uses calendar.get_events, so recurring events (RRULE) are already expanded by HA.
+        """
+        cals = self._cfg.get(CONF_CALENDARS) or []
+        if not cals:
+            return []
+        hours = int(self._cfg.get(CONF_CALENDAR_HOURS, DEFAULT_CALENDAR_HOURS))
+        try:
+            resp = await self.hass.services.async_call(
+                "calendar", "get_events",
+                {"entity_id": cals, "duration": {"hours": hours}},
+                blocking=True, return_response=True,
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("diele_board: calendar.get_events failed: %s", err)
+            return []
+        out = []
+        for data in (resp or {}).values():
+            for ev in data.get("events", []):
+                start = ev.get("start", "")
+                all_day = len(start) == 10
+                dt = dt_util.parse_datetime(start) if not all_day else dt_util.start_of_local_day(
+                    dt_util.parse_date(start))
+                if dt is None:
+                    continue
+                end = dt_util.parse_datetime(ev.get("end", "")) if not all_day else None
+                if end is not None and end < now:
+                    continue
+                out.append((dt_util.as_local(dt), (ev.get("summary") or "").strip(), all_day))
+        out.sort(key=lambda x: x[0])
+        return out
+
+    async def _push_board(self, commute: list[dict[str, Any]], now) -> None:
+        """Send info cards (car commute, calendar) to the board via its ESPHome API action.
+
+        Only changed cards are sent, and unchanged ones are refreshed before their TTL runs out
+        on the board. Cards that disappear are cleared (empty message).
+        """
+        node = (self._cfg.get(CONF_BOARD_NODE) or "").strip()
+        if not node:
+            return
+        svc = f"{node}_push_card"
+        if not self.hass.services.has_service("esphome", svc):
+            return
+        cards: dict[str, tuple[str, int, int, int]] = {}  # key -> (message, tag, prio, ttl)
+        for c in commute:
+            cards[f"car:{c['label']}"] = (f"{c['label']}: {c['min']} min", 1, 2, 900)
+        for i, (start, summary, all_day) in enumerate((await self._calendar_events(now))[:2]):
+            if all_day:
+                msg, prio, ttl = f"Heute: {summary}", 3, 3600
+            else:
+                mins = (start - now).total_seconds() / 60
+                msg = f"{start:%H:%M} {summary}"
+                prio = 1 if 0 <= mins <= 60 else 2
+                ttl = int(max(300, min(7200, (start - now).total_seconds() + 600)))
+            cards[f"cal:{i}"] = (msg, 0, prio, ttl)
+        ts = now.timestamp()
+        for key in list(self._pushed):
+            if key not in cards:
+                await self._call_card(svc, key, "", 6, 2, 0)
+                self._pushed.pop(key, None)
+        for key, (msg, tag, prio, ttl) in cards.items():
+            last = self._pushed.get(key)
+            if last and last[0] == (msg, prio) and ts - last[1] < ttl / 2:
+                continue
+            if await self._call_card(svc, key, msg, tag, prio, ttl):
+                self._pushed[key] = ((msg, prio), ts)
+
+    async def _call_card(self, svc: str, key: str, msg: str, tag: int, prio: int, ttl: int) -> bool:
+        try:
+            await self.hass.services.async_call(
+                "esphome", svc, {"key": key, "message": msg, "tag": tag, "prio": prio, "ttl": ttl},
+                blocking=True,
+            )
+            return True
+        except Exception as err:  # noqa: BLE001 - board offline must not break the coordinator
+            _LOGGER.debug("diele_board: push_card %s failed: %s", key, err)
+            return False
+
     async def _safe(self, coro: Awaitable, label: str):
         try:
             return await coro
@@ -116,11 +204,13 @@ class DieleBoardCoordinator(DataUpdateCoordinator):
         now = dt_util.now()
 
         # One STIB request for both stops (rate limit per key), disruptions only every 10 min.
+        # With stib_polling off the LED board is the only STIB fetcher in the household.
+        polling = self._cfg.get(CONF_STIB_POLLING, True)
         tram_pt, bus_pt = self._cfg[CONF_TRAM_POINT], self._cfg[CONF_BUS_POINT]
-        waits = await self._safe(stib.waiting_times_multi([tram_pt, bus_pt]), "stib") or {}
+        waits = (await self._safe(stib.waiting_times_multi([tram_pt, bus_pt]), "stib") or {}) if polling else {}
         tram, bus = waits.get(tram_pt), waits.get(bus_pt)
-        train = await self._safe(irail.liveboard(self._cfg[CONF_TRAIN_STATION]), "train")
-        if self._disr_ts is None or (now - self._disr_ts).total_seconds() >= _DISRUPTIONS_TTL:
+        train = await self._safe(irail.liveboard(self._cfg[CONF_TRAIN_STATION]), "train") if polling else None
+        if polling and (self._disr_ts is None or (now - self._disr_ts).total_seconds() >= _DISRUPTIONS_TTL):
             fresh = await self._safe(stib.disruptions(), "disruptions")
             if fresh is not None:
                 self._disruptions, self._disr_ts = fresh, now
@@ -129,10 +219,12 @@ class DieleBoardCoordinator(DataUpdateCoordinator):
         tram_line = self._cfg.get(CONF_TRAM_LINE, DEFAULT_TRAM_LINE)
         bus_line = self._cfg.get(CONF_BUS_LINE, DEFAULT_BUS_LINE)
 
+        commute = await self._commutes(now)
+        await self._push_board(commute, now)
         return {
             "mode": self._mode(now),
             "present": self._presence(),
-            "commute": await self._commutes(now),
+            "commute": commute,
             "weather": await self._weather(),
             "alert": self._manual_alert or self._pick_alert(disruptions, {tram_line, bus_line}),
             "transit_fallback": {

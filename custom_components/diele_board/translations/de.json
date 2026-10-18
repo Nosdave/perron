@@ -15,7 +15,11 @@
           "weather_entity": "Wetter-Entity",
           "presence_entities": "Präsenz-Sensoren / Diele",
           "commute_label_1": "Label Pendel 1 (z. B. ein Name)",
-          "commute_label_2": "Label Pendel 2 (z. B. ein Name)"
+          "commute_label_2": "Label Pendel 2 (z. B. ein Name)",
+          "stib_polling": "STIB in Home Assistant abfragen (aus, wenn die LED-Tafel selbst abruft)",
+          "board_node": "ESPHome-Name der Tafel (z. B. diele_board) für Infokarten",
+          "calendars": "Kalender für die Tafel",
+          "calendar_hours": "Kalender-Vorschau (Stunden)"
         }
       }
     },
@@ -42,7 +46,11 @@
           "weather_entity": "Wetter-Entity",
           "presence_entities": "Präsenz-Sensoren / Diele",
           "commute_label_1": "Label Pendel 1 (z. B. ein Name)",
-          "commute_label_2": "Label Pendel 2 (z. B. ein Name)"
+          "commute_label_2": "Label Pendel 2 (z. B. ein Name)",
+          "stib_polling": "STIB in Home Assistant abfragen (aus, wenn die LED-Tafel selbst abruft)",
+          "board_node": "ESPHome-Name der Tafel (z. B. diele_board) für Infokarten",
+          "calendars": "Kalender für die Tafel",
+          "calendar_hours": "Kalender-Vorschau (Stunden)"
         }
       }
     },

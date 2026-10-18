@@ -230,6 +230,15 @@ def arrows_now(c: Canvas, x_right, y, color, phase=0):
                     c.pixel(ax + j, ay + i * 2 + 1, color)
 
 
+def walk_tag(c: Canvas, x_right, y, walk):
+    """Iteration 6: walking time = pedestrian glyph + minutes (dim), right-aligned at x_right."""
+    t = str(walk)
+    tw = c.width(t)
+    c.text(x_right, y + 4, t, SEC, align="right")
+    c.icon(x_right - tw - 6, y + 3, "walk", size=7, tint=SEC)
+    return tw + 6
+
+
 def dep_row4(c: Canvas, y, line, dest, mins, walk=3, second=True, delay=0, big=True):
     """Row = 14 px. badge x1 | dest x23..143 (6x10) | first dep right edge 168 (9x15B) | second 191."""
     badge4(c, 1, y + 1, line)
@@ -247,8 +256,11 @@ def dep_row4(c: Canvas, y, line, dest, mins, walk=3, second=True, delay=0, big=T
         c.text(191, y + 4, f"+{delay}", LEAVE, align="right")
     elif second and len(mins) > 1:
         c.text(191, y + 4, f"{mins[1]}'", SEC, align="right")
-    name = fit_words(c, short_dest(dest), 116, "mid") or fit_words(c, short_dest(dest), 116, "small")
-    font = "mid" if fit_words(c, short_dest(dest), 116, "mid") else "small"
+    mw = c.width(str(m0), "big") if (m0 is not None and m0 > 0) else 16
+    wt = walk_tag(c, 168 - mw - 5, y, walk)
+    dw = 168 - mw - 5 - wt - 4 - 27
+    name = fit_words(c, short_dest(dest), dw, "mid") or fit_words(c, short_dest(dest), dw, "small")
+    font = "mid" if fit_words(c, short_dest(dest), dw, "mid") else "small"
     c.text(27, y + 4 if font == "mid" else y + 5, name or "", WARM, font=font)
 
 
@@ -269,9 +281,9 @@ def pager(c: Canvas, tag, text):
 
 def D1(c: Canvas):
     status_bar(c)
-    dep_row4(c, 11, "92", "Schaerbeek Gare", [6, 15])
-    dep_row4(c, 25, "92", "Fort-Jaco", [3, 13])
-    dep_row4(c, 39, "S5", "Mechelen", [12], delay=3)
+    dep_row4(c, 11, "92", "Schaerbeek Gare", [6, 15], walk=1)
+    dep_row4(c, 25, "60", "Ambiorix", [7, 19], walk=5)
+    dep_row4(c, 39, "S5", "Mechelen", [14], walk=12, delay=3)
     pager(c, "cal", "15:30 Zahnarzt Dr. Peeters")
 
 

@@ -59,6 +59,12 @@ CONF_WEATHER_ENTITY = "weather_entity"
 CONF_PRESENCE_ENTITIES = "presence_entities"
 CONF_COMMUTE_LABEL_1 = "commute_label_1"
 CONF_COMMUTE_LABEL_2 = "commute_label_2"
+# v0.2: the LED board fetches STIB itself; HA only pushes extras (calendar, car commute).
+CONF_STIB_POLLING = "stib_polling"      # False = no STIB calls from HA (board is the fetcher)
+CONF_BOARD_NODE = "board_node"          # ESPHome node name, e.g. "diele_board" -> esphome.diele_board_push_card
+CONF_CALENDARS = "calendars"            # calendar.* entities pushed to the board
+CONF_CALENDAR_HOURS = "calendar_hours"  # look-ahead
+DEFAULT_CALENDAR_HOURS = 12
 
 # ─── Waze commute slots ───────────────────────────────────────────────────────
 # Two destination helpers (text.* entities). Labels are user-configurable so no

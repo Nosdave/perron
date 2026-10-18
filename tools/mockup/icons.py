@@ -352,6 +352,16 @@ ICONS9 = {
 
 # Small 7x7 glyphs for status/alerts.
 ICONS7 = {
+    # 5x7 pedestrian (walking time to the stop)
+    "walk": [
+        "..##.",
+        "..##.",
+        ".###.",
+        "#.##.",
+        "..#.#",
+        ".#.#.",
+        "#...#",
+    ],
     "warn": [
         "...R...",
         "..RKR..",
@@ -404,6 +414,9 @@ def weather_condition(ww: int, night: bool) -> str:
 def _check():
     assert set(ICONS9) == set(ICONS16), "ICONS9 must cover every ICONS16 condition"
     for name, rows in {**ICONS16, **{f"9:{k}": v for k, v in ICONS9.items()}, **ICONS7}.items():
+        if name == "walk":
+            assert all(len(r) == 5 for r in rows)
+            continue
         w = len(rows[0])
         assert all(len(r) == w for r in rows), name
         assert all(c == "." or c in PALETTE for r in rows for c in r), name

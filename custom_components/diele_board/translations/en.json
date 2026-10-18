@@ -15,7 +15,11 @@
           "weather_entity": "Weather entity",
           "presence_entities": "Presence sensors / Diele",
           "commute_label_1": "Commute 1 label (e.g. a name)",
-          "commute_label_2": "Commute 2 label (e.g. a name)"
+          "commute_label_2": "Commute 2 label (e.g. a name)",
+          "stib_polling": "Poll STIB from Home Assistant (off when the LED board fetches itself)",
+          "board_node": "Board ESPHome node name (e.g. diele_board) for info cards",
+          "calendars": "Calendars shown on the board",
+          "calendar_hours": "Calendar look-ahead (hours)"
         }
       }
     },
@@ -42,7 +46,11 @@
           "weather_entity": "Weather entity",
           "presence_entities": "Presence sensors / Diele",
           "commute_label_1": "Commute 1 label (e.g. a name)",
-          "commute_label_2": "Commute 2 label (e.g. a name)"
+          "commute_label_2": "Commute 2 label (e.g. a name)",
+          "stib_polling": "Poll STIB from Home Assistant (off when the LED board fetches itself)",
+          "board_node": "Board ESPHome node name (e.g. diele_board) for info cards",
+          "calendars": "Calendars shown on the board",
+          "calendar_hours": "Calendar look-ahead (hours)"
         }
       }
     },

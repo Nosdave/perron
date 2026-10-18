@@ -45,6 +45,7 @@ static const Icon ICONS9[] = {
   {"fog", 9, 9, "............WWW.....WWWWW...........FFFFFFFF...........FFFFFFFF.........FFFFFFF.."},
 };
 static const Icon ICONS7[] = {
+  {"walk", 5, 7, "..##...##..###.#.##...#.#.#.#.#...#"},
   {"warn", 7, 7, "...R.....RKR....RKR...RRKRR..RRRRR.RRRKRRRRRRRRRR"},
   {"arrow-right", 7, 7, "...A.......A.......A.AAAAAAA.....A.....A.....A..."},
   {"wifi-off", 7, 7, "R.....R.R...R...R.R.....R.....R.R...R...R.R.....R"},

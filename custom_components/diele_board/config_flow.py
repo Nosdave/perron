@@ -16,12 +16,16 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import StibClient, StibError
 from .const import (
+    CONF_BOARD_NODE,
     CONF_BUS_LINE,
     CONF_BUS_POINT,
+    CONF_CALENDAR_HOURS,
+    CONF_CALENDARS,
     CONF_COMMUTE_LABEL_1,
     CONF_COMMUTE_LABEL_2,
     CONF_PARTNER_KEY,
     CONF_PRESENCE_ENTITIES,
+    CONF_STIB_POLLING,
     CONF_TRAIN_PLATFORM,
     CONF_TRAIN_STATION,
     CONF_TRAM_LINE,
@@ -29,6 +33,7 @@ from .const import (
     CONF_WEATHER_ENTITY,
     DEFAULT_BUS_LINE,
     DEFAULT_BUS_POINT,
+    DEFAULT_CALENDAR_HOURS,
     DEFAULT_COMMUTE_LABEL_1,
     DEFAULT_COMMUTE_LABEL_2,
     DEFAULT_TRAIN_PLATFORM,
@@ -46,7 +51,8 @@ def _schema(d: dict[str, Any]) -> vol.Schema:
     be left empty — a default of "" is an invalid entity and would force a pick.
     """
     fields: dict[Any, Any] = {
-        vol.Required(CONF_PARTNER_KEY, default=d.get(CONF_PARTNER_KEY, "")): str,
+        vol.Optional(CONF_STIB_POLLING, default=d.get(CONF_STIB_POLLING, True)): bool,
+        vol.Optional(CONF_PARTNER_KEY, default=d.get(CONF_PARTNER_KEY, "")): str,
         vol.Required(CONF_TRAM_POINT, default=d.get(CONF_TRAM_POINT, DEFAULT_TRAM_POINT)): str,
         vol.Required(CONF_TRAM_LINE, default=d.get(CONF_TRAM_LINE, DEFAULT_TRAM_LINE)): str,
         vol.Required(CONF_BUS_POINT, default=d.get(CONF_BUS_POINT, DEFAULT_BUS_POINT)): str,
@@ -65,12 +71,26 @@ def _schema(d: dict[str, Any]) -> vol.Schema:
         ),
         vol.Optional(CONF_COMMUTE_LABEL_1, default=d.get(CONF_COMMUTE_LABEL_1, DEFAULT_COMMUTE_LABEL_1)): str,
         vol.Optional(CONF_COMMUTE_LABEL_2, default=d.get(CONF_COMMUTE_LABEL_2, DEFAULT_COMMUTE_LABEL_2)): str,
+        vol.Optional(CONF_BOARD_NODE, description={"suggested_value": d.get(CONF_BOARD_NODE)}): str,
+        vol.Optional(
+            CONF_CALENDARS, description={"suggested_value": d.get(CONF_CALENDARS)}
+        ): selector.EntitySelector(selector.EntitySelectorConfig(domain="calendar", multiple=True)),
+        vol.Optional(
+            CONF_CALENDAR_HOURS, default=d.get(CONF_CALENDAR_HOURS, DEFAULT_CALENDAR_HOURS)
+        ): vol.All(vol.Coerce(int), vol.Range(min=1, max=72)),
     }
     return vol.Schema(fields)
 
 
 async def _validate(hass, user_input: dict[str, Any]) -> dict[str, str]:
-    """Return {} if the STIB key + tram point work, else an errors dict."""
+    """Return {} if the STIB key + tram point work, else an errors dict.
+
+    Without STIB polling (the board fetches STIB itself) there is nothing to validate.
+    """
+    if not user_input.get(CONF_STIB_POLLING, True):
+        return {}
+    if not user_input.get(CONF_PARTNER_KEY):
+        return {"base": "cannot_connect"}
     session = async_get_clientsession(hass)
     try:
         await StibClient(session, user_input[CONF_PARTNER_KEY]).waiting_times(
