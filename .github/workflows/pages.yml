@@ -1,0 +1,56 @@
+# Baut die Board-Firmware und veröffentlicht sie zusammen mit dem GPS-Einrichtungshelfer auf
+# GitHub Pages:
+#   https://nosdave.github.io/ha-diele-board/setup/            GPS-Helfer (https -> Geolocation)
+#   https://nosdave.github.io/ha-diele-board/data/              Haltestellen/Bahnhöfe (aus GTFS)
+#   https://nosdave.github.io/ha-diele-board/firmware/manifest.json   Firmware-Updates (OTA)
+# Das Board prüft das Manifest alle 6 h und installiert neue Versionen nachts (03-05 Uhr).
+name: Firmware + Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["esphome/**", "site/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build firmware
+        id: esphome
+        uses: esphome/build-action@v8.1.0
+        with:
+          yaml-file: esphome/diele-board.yaml
+          version: 2026.5.3
+          complete-manifest: true
+          release-summary: "Diele Board firmware"
+          release-url: "https://github.com/${{ github.repository }}/commits/${{ github.sha }}"
+      - name: Assemble site
+        run: |
+          mkdir -p _site/firmware
+          cp -r site/* _site/
+          cp -r "${{ steps.esphome.outputs.name }}"/* _site/firmware/
+          ls -la _site/firmware
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
