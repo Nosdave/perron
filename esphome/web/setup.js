@@ -16,7 +16,7 @@
     bright: N("Helligkeit"), nbright: N("Helligkeit Nacht"), walk: N("Gehzeit zur Haltestelle"), wtrain: N("Gehzeit zum Bahnhof"),
     horizon: N("Vorschau"), dwell: N("Infozeile Wechsel"),
     wx: SW("Wetter (KMI)"), bea: SW("BE-Alert"), disr: SW("STIB-Störungen"), news: SW("Schlagzeilen"),
-    second: SW("Zweite Abfahrt"), autob: SW("Automatische Helligkeit"), status: SW("Statusleiste"), pager: SW("Infozeile"), freeon: SW("Freitext anzeigen"),
+    second: SW("Zweite Abfahrt"), autoup: SW("Automatische Updates"), autob: SW("Automatische Helligkeit"), status: SW("Statusleiste"), pager: SW("Infozeile"), freeon: SW("Freitext anzeigen"),
   };
   const enc = encodeURIComponent;
   const url = ([d, n]) => `/${d}/${enc(n)}`;
@@ -170,7 +170,8 @@
       };
       tick(); clearInterval(window.__dst); window.__dst = setInterval(tick, 5000);
       return [h("p", { class: "lead" }, "Live-Zustand der Datenquellen."), st,
-              h("p", { class: "hint" }, "Updates kommen über WLAN. In Home Assistant erscheint die Tafel automatisch (ESPHome).")];
+              toggle("Automatische Updates (nachts 3–5 Uhr)", "autoup", "Neue Versionen kommen direkt von GitHub – auch ohne Home Assistant."),
+              h("p", { class: "hint" }, "In Home Assistant erscheint die Tafel automatisch (ESPHome) und kann dort ebenfalls eingestellt werden.")];
     } },
   ];
 

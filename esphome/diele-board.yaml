@@ -53,6 +53,16 @@ api:
 
 ota:
   - platform: esphome
+  - platform: http_request   # Updates direkt von GitHub Pages (ohne HA)
+
+# Firmware-Updates: Manifest auf GitHub Pages (gebaut von .github/workflows/pages.yml).
+# Prüft alle 6 h; installiert automatisch nur nachts (03-05 Uhr), abschaltbar.
+update:
+  - platform: http_request
+    id: fw_update
+    name: "Firmware"
+    source: https://nosdave.github.io/ha-diele-board/firmware/manifest.json
+    update_interval: 6h
 
 wifi:
   # Keine Zugangsdaten hier: werden über Hotspot/Captive-Portal (oder USB/Improv) eingegeben
@@ -138,6 +148,35 @@ text_sensor:
       snprintf(t, sizeof(t), " | Abfahrten %u+%u | Stack %u", (unsigned) m.deps.size(), (unsigned) m.trains.size(),
                (unsigned) m.stack_free);
       return out.empty() ? std::string("warte auf Daten") : out + t;
+
+  # Abfahrten für Home Assistant (Sprachassistent, Automationen): die Tafel ist der einzige
+  # STIB-Abrufer im Haus -> HA liest hier statt selbst zu pollen (API-Limit pro Schlüssel).
+  # JSON: [{"l":"92","d":"Schaerbeek","m":[6,15]},...]  (max. 255 Zeichen)
+  - platform: template
+    id: departures_json
+    name: "Abfahrten"
+    icon: mdi:bus-clock
+    update_interval: 30s
+    lambda: |-
+      auto &rows = diele::frame().rows;
+      std::string o = "[";
+      for (size_t i = 0; i < rows.size(); i++) {
+        std::string e = std::string(i ? "," : "") + "{\"l\":\"" + rows[i].line + "\",\"d\":\"" + rows[i].dest + "\",\"m\":[";
+        for (size_t k = 0; k < rows[i].mins.size(); k++) e += (k ? "," : "") + std::to_string(rows[i].mins[k]);
+        e += "]}";
+        if (o.size() + e.size() + 1 > 255) break;
+        o += e;
+      }
+      return o + "]";
+  - platform: template
+    id: next_departure
+    name: "Nächste Abfahrt"
+    icon: mdi:clock-fast
+    update_interval: 30s
+    lambda: |-
+      auto &rows = diele::frame().rows;
+      if (rows.empty()) return std::string("");
+      return rows[0].line + " " + rows[0].dest + " " + std::to_string(rows[0].mins[0]) + " min";
 
 debug:
   update_interval: 60s

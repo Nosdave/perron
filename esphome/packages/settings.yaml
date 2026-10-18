@@ -297,6 +297,13 @@ switch:
     restore_mode: RESTORE_DEFAULT_ON
     entity_category: config
   - platform: template
+    id: sw_auto_update
+    name: "Automatische Updates"
+    icon: mdi:update
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+  - platform: template
     id: sw_free
     name: "Freitext anzeigen"
     icon: mdi:message-text
@@ -369,3 +376,17 @@ interval:
           static int last_b = -1;
           int b = (int) lroundf(smooth);
           if (abs(b - last_b) >= 2 || (last_b != b && (b <= 10 || night))) { id(matrix).set_brightness(b); last_b = b; }
+
+  # Automatische Updates: nur nachts zwischen 03:00 und 05:00, wenn eine neue Version bereitsteht.
+  - interval: 15min
+    then:
+      - if:
+          condition:
+            lambda: |-
+              auto t = id(sntp_time).now();
+              return id(sw_auto_update).state && t.is_valid() && t.hour >= 3 && t.hour < 5 &&
+                     id(fw_update).state == update::UPDATE_STATE_AVAILABLE;
+          then:
+            - logger.log: "Neue Firmware verfuegbar - installiere"
+            - update.perform:
+                id: fw_update
