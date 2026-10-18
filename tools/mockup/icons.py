@@ -354,11 +354,11 @@ ICONS9 = {
 ICONS7 = {
     # 5x7 pedestrian (walking time to the stop)
     "walk": [
-        "..WW.",
-        "..WW.",
+        "..W..",
+        ".....",
         ".WWW.",
-        "W.WW.",
-        "..W.W",
+        "W.W.W",
+        "..W..",
         ".W.W.",
         "W...W",
     ],

@@ -1,11 +1,10 @@
-pos,part,recommendation,vendors,qty,unit_eur_low,unit_eur_high
-1,LED panel 64x64 P4 HUB75 256x256mm,Waveshare RGB-Matrix-P4-64x64 or equiv,"kiwi-electronics.com;tinytronics.nl;waveshare.com;amazon.de",3,45,70
-2,Controller Adafruit MatrixPortal S3 (#5778),Adafruit MatrixPortal S3,"eckstein-shop.de;kiwi-electronics.com;adafruit.com",1,27,35
-3,PSU 5V 150W,Meanwell LRS-150-5 (or LRS-200-5),"reichelt.de;conrad.be;tme.eu",1,30,55
-4,Light sensor VEML7700 (#4162),Adafruit VEML7700 STEMMA QT,"kiwi-electronics.com;adafruit.com",1,6,10
-5,Power wiring AWG14-16 + ferrules,red/black + ferrules,"local;amazon.de",1,10,10
-6,Inline fuse 25A 5x20mm + holder,fuse + holder,"amazon.de;conrad.be",1,5,5
-7,HUB75 ribbon cable 2x8 IDC,spare ribbon,"aliexpress;amazon.de",2,3,3
-8,Front dark tinted acrylic 25-40pct,laser cut to size,"snijlab.nl;local laser BXL",1,25,45
-9,Frame solid oak + black alu bezel,CNC/carpenter,"local",1,60,180
-10,Mounting french cleat + cable channel,hidden mount,"hardware store",1,20,20
+pos,part,specification,qty,notes
+1,LED matrix panel,64x64 RGB HUB75 P4 (256x256 mm) 1/32 scan,3,chained horizontally -> 192x64 px / 768x256 mm
+2,Controller,Adafruit MatrixPortal S3 (ESP32-S3 N8R2),1,address-E jumper on pad 8 for 64x64 panels
+3,Power supply,Mean Well LRS-150-5 (5 V / 30 A),1,enclosed; earth connected; adjust to 5.0-5.1 V before connecting panels
+4,Inline fuse,ATO/ATC blade fuse holder 12 AWG + 25 A fuse,1,on the +5 V line to the panels (20 A with 14 AWG wiring)
+5,Power wiring,14-12 AWG red/black + ferrules,1,one pair per panel (star wiring from the PSU)
+6,Controller power,USB-C cable or USB-C pigtail from the 5 V PSU,1,do not feed 5 V into the MatrixPortal screw terminals
+7,Ambient light sensor (optional),Adafruit VEML7700 (STEMMA QT) + 100 mm STEMMA QT cable,1,automatic brightness; keep away from the LEDs
+8,Front panel (optional),Smoked grey cast acrylic 3 mm (~21 % transmission e.g. PLEXIGLAS GS 7C83),1,glossy; no diffuser for crisp pixels
+9,HUB75 ribbon cables,2x8 IDC,2,usually included with the panels

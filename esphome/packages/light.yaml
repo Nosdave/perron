@@ -10,8 +10,8 @@ sensor:
   - platform: veml7700
     address: 0x10
     update_interval: 5s
-    # Hinter getöntem Acryl (25–40 % Transmission) misst der Sensor zu dunkel; Faktor ~3.
-    # Ohne Frontscheibe auf 1.0 setzen.
+    # Frontscheiben-Korrektur passiert zur Laufzeit (Einstellung "Frontscheibe Lichtdurchlass"),
+    # damit kein Neu-Flashen nötig ist, wenn die Scheibe montiert/gewechselt wird.
     glass_attenuation_factor: 1.0
     ambient_light:
       id: ambient_lux
@@ -28,4 +28,18 @@ switch:
     icon: mdi:brightness-auto
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+
+number:
+  - platform: template
+    id: cfg_glass
+    name: "Frontscheibe Lichtdurchlass"
+    icon: mdi:mirror
+    unit_of_measurement: "%"
+    min_value: 5
+    max_value: 100
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 100   # ohne Scheibe; Plexiglas 7C83 = 21
     entity_category: config

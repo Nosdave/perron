@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Diele Board – Haltestelle wählen</title>
+<title>Perron – Haltestelle wählen</title>
 <meta name="referrer" content="no-referrer">
 <style>
   :root { --bg:#0e0e10; --card:#18181c; --line:#2a2a30; --fg:#ffe9cc; --sec:#9a948c; --acc:#ffa000; --ok:#4fd1c5; }
@@ -146,7 +146,7 @@
     renderStations(STATIONS.map(s => [dist(here, s), s]).sort((a, b) => a[0] - b[0]).slice(0, 3).map(x => x[1]));
   }
 
-  // accent- and punctuation-insensitive: "thevenet" finds "Thévenet", "st job" finds "Saint-Job"
+  // accent- and punctuation-insensitive: "merode" finds "Mérode", "st job" finds "Saint-Job"
   const norm = (x) => x.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[-'’.]/g, " ").replace(/\s+/g, " ");
   function search(q) {
     q = norm(q.trim());
@@ -204,7 +204,7 @@
   $("apply").onclick = () => {
     const p = payload();
     if (window.opener && RET_OK) {
-      window.opener.postMessage({ diele: p }, ret);
+      window.opener.postMessage({ perron: p }, ret);
       $("sum").innerHTML = '<span class="okmsg">Übernommen. Du kannst dieses Fenster schließen.</span>';
       setTimeout(() => window.close(), 800);
     } else if (RET_OK) {

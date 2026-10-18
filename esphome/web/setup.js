@@ -1,8 +1,8 @@
-// Diele Board – on-device setup & settings UI (served by ESPHome web_server as /0.js).
+// Perron – on-device setup & settings UI (served by ESPHome web_server as /0.js).
 // No external resources: works without internet (except the optional GPS helper on GitHub Pages,
 // which is needed because browsers only allow geolocation on https pages).
 (() => {
-  const HELPER = "https://nosdave.github.io/ha-diele-board/setup/";
+  const HELPER = "https://nosdave.github.io/perron/setup/";
   const helperUrl = new URLSearchParams(location.search).get("helper") || HELPER;  // ?helper= for testing
   const HELPER_ORIGIN = new URL(helperUrl).origin;
 
@@ -13,7 +13,7 @@
     station: T("Bahnhof"), tfilter: T("Zugfilter"), cfrom: T("Pendeln von"), cto: T("Pendeln nach"),
     loc: T("Standort"), dfilter: T("Zielfilter"), alias: T("Kurznamen"), night: T("Nachtzeit"), free: T("Freitext"),
     layout: SEL("Layout"), lang: SEL("Sprache"), nmode: SEL("Nachtmodus"),
-    bright: N("Helligkeit"), nbright: N("Helligkeit Nacht"), walk: N("Gehzeit zur Haltestelle"), wtrain: N("Gehzeit zum Bahnhof"),
+    bright: N("Helligkeit"), nbright: N("Helligkeit Nacht"), glass: N("Frontscheibe Lichtdurchlass"), walk: N("Gehzeit zur Haltestelle"), wtrain: N("Gehzeit zum Bahnhof"),
     horizon: N("Vorschau"), dwell: N("Infozeile Wechsel"),
     wx: SW("Wetter (KMI)"), bea: SW("BE-Alert"), disr: SW("STIB-Störungen"), news: SW("Schlagzeilen"),
     second: SW("Zweite Abfahrt"), showwalk: SW("Gehzeit anzeigen"), pintrain: SW("Zug immer anzeigen"), autoup: SW("Automatische Updates"), autob: SW("Automatische Helligkeit"), status: SW("Statusleiste"), pager: SW("Infozeile"), freeon: SW("Freitext anzeigen"),
@@ -96,11 +96,11 @@
     go(1);
   }
   addEventListener("message", (ev) => {
-    if (ev.origin !== HELPER_ORIGIN || !ev.data || !ev.data.diele) return;
-    applyHelper(ev.data.diele);
+    if (ev.origin !== HELPER_ORIGIN || !ev.data || !ev.data.perron) return;
+    applyHelper(ev.data.perron);
   });
   function openHelper() {
-    const w = open(`${helperUrl}?ret=${enc(location.origin)}`, "diele-helper");
+    const w = open(`${helperUrl}?ret=${enc(location.origin)}`, "perron-helper");
     if (!w) toast("Pop-up blockiert – bitte erlauben.");
   }
   function readHash() {
@@ -127,9 +127,9 @@
       h("p", { class: "hint" }, "Öffnet eine sichere Hilfsseite (GPS geht im Browser nur über https). Dein Standort bleibt auf dem Handy."),
       h("details", {}, h("summary", {}, "Manuell eintragen"),
         field("Haltestellen (STIB-Bahnsteig-IDs)", "points", { ph: "z. B. 1234:1,1235:1,2345:5", hint: "Kommagetrennt, jede Richtung hat eine eigene ID. Optional :Minuten = Gehzeit zu genau dieser Haltestelle." }),
-        field("Linienfilter", "lines", { ph: "leer = alle Linien", hint: "z. B. 92,60" }),
-        field("Zielfilter", "dfilter", { ph: "z. B. 60=Ambiorix", hint: "Linie nur in Richtung dieser Ziele (Teil des Namens). Mehrere mit ; trennen." }),
-        field("Standort (Breite,Länge)", "loc", { ph: "50.80,4.36", hint: "Für Wetter und BE-Alert. Leer = Uccle." })),
+        field("Linienfilter", "lines", { ph: "leer = alle Linien", hint: "z. B. 81,71" }),
+        field("Zielfilter", "dfilter", { ph: "z. B. 71=Delta", hint: "Linie nur in Richtung dieser Ziele (Teil des Namens). Mehrere mit ; trennen." }),
+        field("Standort (Breite,Länge)", "loc", { ph: "50.85,4.35", hint: "Für Wetter und BE-Alert. Leer = Brüssel-Zentrum." })),
       range("Gehzeit (Standard für Haltestellen ohne eigene Angabe)", "walk", 0, 15, 1, " min"),
     ] },
     { t: "Zug & Pendeln", b: () => [
@@ -145,7 +145,7 @@
     { t: "Daten", b: () => [
       h("p", { class: "lead" }, "Was die Tafel selbst aus dem Internet holt – auch ohne Home Assistant."),
       field("STIB API-Schlüssel", "key", { type: "password", hint: "Kostenlos auf data.belgianmobility.io. Ohne Schlüssel gilt ein knappes gemeinsames Limit pro Internetanschluss." }),
-      toggle("Wetter vom KMI (Uccle)", "wx"),
+      toggle("Wetter vom KMI/IRM", "wx"),
       toggle("BE-Alert Warnungen für deinen Standort", "bea"),
       toggle("STIB-Störungen deiner Linien", "disr"),
       toggle("Schlagzeilen (Brussels Times)", "news"),
@@ -156,13 +156,14 @@
       choice("Layout", "layout"), choice("Sprache", "lang"),
       toggle("Automatische Helligkeit", "autob", "Mit Lichtsensor (VEML7700): regelt zwischen Nacht- und Tageshelligkeit."),
       range("Helligkeit (maximal)", "bright", 5, 255, 5, ""),
+      range("Frontscheibe Lichtdurchlass (Lichtsensor-Korrektur)", "glass", 5, 100, 1, " %"),
       toggle("Zweite Abfahrt anzeigen", "second"), toggle("Gehzeit anzeigen (Symbol + Minuten)", "showwalk"), toggle("Statusleiste (Uhr, Wetter)", "status"),
       toggle("Infozeile (Störungen, Termine, Wetter …)", "pager"),
       range("Infozeile wechselt alle", "dwell", 3, 15, 1, " s"),
       range("Abfahrten anzeigen bis", "horizon", 15, 95, 5, " min"),
       choice("Nachtmodus", "nmode"), field("Nachtzeit", "night", { ph: "23:00-06:00" }),
       range("Helligkeit nachts", "nbright", 2, 120, 1, ""),
-      field("Kurznamen", "alias", { ph: "Gare du Nord=Nord;Schaerbeek Gare=Schaerbeek", hint: "Lange Ziele kürzen: Original=Kurz, mit ; getrennt." }),
+      field("Kurznamen", "alias", { ph: "Gare du Midi=Midi;Gare du Nord=Nord", hint: "Lange Ziele kürzen: Original=Kurz, mit ; getrennt." }),
     ] },
     { t: "Status", b: () => {
       const st = h("pre", { class: "status" }, "…");
@@ -192,9 +193,9 @@
   }
 
   async function boot() {
-    document.title = "Diele Board";
+    document.title = "Perron";
     document.body.innerHTML = "";
-    document.body.append(h("header", {}, h("div", { class: "logo" }, "DIELE", h("span", {}, "BOARD")),
+    document.body.append(h("header", {}, h("div", { class: "logo" }, "PERRON"),
                                       h("div", { class: "sub" }, location.host)), app);
     app.append(h("p", { class: "lead" }, "Lade Einstellungen …"));
     await loadAll();

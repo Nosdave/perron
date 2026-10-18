@@ -1,4 +1,4 @@
-# Diele Board – SMOKE TEST (Phase 2, Verkabelung)
+# Perron – SMOKE TEST (Phase 2, Verkabelung)
 # ==================================================
 # Zweck: Panels EINZELN gegenprüfen, BEVOR der volle Strom + die echte Config drauf geht.
 # Flasht standalone über USB – kein WLAN, kein HA, kein Transit nötig.
@@ -12,18 +12,18 @@
 #      -> Erwartet: "1" | "2", durchgehender Rahmen über beide, eine Naht-Linie dazwischen.
 #   4. Panel 3 dazu. `layout_cols: 3`. -> "1" | "2" | "3", Rahmen über volle 192 px.
 #   5. Erst wenn alles sauber: Helligkeit testweise hochdrehen (brightness unten),
-#      dabei Netzteil/Kabel auf Wärme prüfen. Danach zurück auf die echte diele-board.yaml.
+#      dabei Netzteil/Kabel auf Wärme prüfen. Danach zurück auf die echte perron.yaml.
 #
 # Farbkanal-Check: Blöcke müssen in DIESER Reihenfolge ROT, GRÜN, BLAU sein.
 #   Sind sie vertauscht (z. B. Rot<->Blau) -> Panel ist BGR statt RGB; dann in der echten
 #   Config den rgb/bgr-Treiber anpassen (Notiz für Phase 2).
 
 substitutions:
-  name: diele-smoketest
+  name: perron-smoketest
 
 esphome:
   name: ${name}
-  friendly_name: "Diele Smoke Test"
+  friendly_name: "Perron Smoke Test"
 
 esp32:
   board: adafruit_matrixportal_esp32s3

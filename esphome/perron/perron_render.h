@@ -1,4 +1,4 @@
-// Diele Board – renderer. Port of tools/mockup/scenes.py iteration 5 (D1/D2/P0/NIGHT), revised
+// Perron – renderer. Port of tools/mockup/scenes.py iteration 5 (D1/D2/P0/NIGHT), revised
 // after 2 independent agent reviews (fidelity, performance, UX edge cases).
 //
 // Performance: render() runs every 50 ms. The model is re-snapshotted only when its generation
@@ -9,6 +9,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -16,11 +17,11 @@
 #include "esphome/components/font/font.h"
 #include "esphome/core/hal.h"
 
-#include "diele_core.h"
-#include "diele_icons.h"
-#include "diele_lines.h"
+#include "perron_core.h"
+#include "perron_icons.h"
+#include "perron_lines.h"
 
-namespace diele {
+namespace perron {
 
 using esphome::Color;
 using esphome::display::Display;
@@ -50,11 +51,14 @@ static Color tag_color(uint8_t t) {
 }
 
 // ------------------------------------------------------------------ look / layout settings
-enum Layout : uint8_t { LAYOUT_STANDARD = 0, LAYOUT_HERO = 1, LAYOUT_COMPACT = 2 };
+// Iteration 8 (2nd multi-agent design review): fixed grid, no rotating rows.
+//   PREMIUM: status | 2 large rows (first two groups) | split row (next two groups) | pager
+//   FOUR:    slim status | 4 equal rows | pager       HERO: status | 2 very large rows | pager
+enum Layout : uint8_t { LAYOUT_PREMIUM = 0, LAYOUT_FOUR = 1, LAYOUT_HERO = 2 };
 enum NightMode : uint8_t { NIGHT_OFF = 0, NIGHT_DIM = 1, NIGHT_CLOCK = 2, NIGHT_DARK = 3 };
 
 struct Look {
-  Layout layout = LAYOUT_STANDARD;
+  Layout layout = LAYOUT_PREMIUM;
   bool status_bar = true, pager = true, second = true;
   int walk_min = 3;          // minutes to the stop
   int walk_train_min = 8;    // minutes to the station
@@ -63,9 +67,9 @@ struct Look {
   std::string ui_lang = "de";
   NightMode night = NIGHT_DIM;
   int night_from = 23 * 60, night_to = 6 * 60;  // minutes of day
-  std::string aliases;       // "Schaerbeek Gare=Schaerbeek;Gare du Nord=Nord"
+  std::string aliases;       // "Gare du Midi=Midi;Gare du Nord=Nord"
   std::string points;        // "1234:1,2345:5" -> per-stop walking minutes (default walk_min)
-  std::string dest_filter;   // "60=Ambiorix;92=Schaerbeek" -> line only towards matching destinations
+  std::string dest_filter;   // "71=Delta;81=Montgomery" -> line only towards matching destinations
   bool show_walk = true;     // pedestrian glyph + walking minutes in every row
   bool pin_train = true;     // always keep one row for the next (filtered) train
   bool free_on = false;
@@ -73,7 +77,7 @@ struct Look {
   uint32_t version = 0;      // bumped by the settings interval when anything changed
 };
 
-struct Fonts { Font *small, *mid, *big, *clock; };
+struct Fonts { Font *small, *mid, *big, *clock, *dest; };
 
 inline Look &look() { static Look l; return l; }  // main-loop only (set by settings interval)
 
@@ -81,16 +85,21 @@ inline Look &look() { static Look l; return l; }  // main-loop only (set by sett
 struct Strings {
   const char *no_deps, *no_live, *work, *train, *rain_in, *alert, *bealert, *kmi;
   const char *wd[7];
+  const char *rain_from, *rain_now, *rain_until, *light, *moderate, *heavy;
 };
 static const Strings &S(const std::string &lang) {
   static const Strings de = {"Keine Abfahrten", "Keine Live-Daten", "Arbeit", "Zug", "Regen in ca. %d h",
-                             "WARNUNG", "BE-ALERT", "KMI", {"So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"}};
+                             "WARNUNG", "BE-ALERT", "KMI", {"So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"},
+                             "Regen ab %s", "Regen jetzt", "bis ca. %s", "leicht", "mäßig", "stark"};
   static const Strings fr = {"Pas de départ", "Pas de données", "Travail", "train", "Pluie dans ~%d h",
-                             "ALERTE", "BE-ALERT", "IRM", {"di", "lu", "ma", "me", "je", "ve", "sa"}};
+                             "ALERTE", "BE-ALERT", "IRM", {"di", "lu", "ma", "me", "je", "ve", "sa"},
+                             "Pluie dès %s", "Pluie maintenant", "jusqu'à ~%s", "faible", "modérée", "forte"};
   static const Strings nl = {"Geen vertrek", "Geen live-data", "Werk", "trein", "Regen over ~%d u",
-                             "ALARM", "BE-ALERT", "KMI", {"zo", "ma", "di", "wo", "do", "vr", "za"}};
+                             "ALARM", "BE-ALERT", "KMI", {"zo", "ma", "di", "wo", "do", "vr", "za"},
+                             "Regen vanaf %s", "Regen nu", "tot ~%s", "licht", "matig", "zwaar"};
   static const Strings en = {"No departures", "No live data", "Work", "train", "Rain in ~%d h",
-                             "ALERT", "BE-ALERT", "RMI", {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"}};
+                             "ALERT", "BE-ALERT", "RMI", {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"},
+                             "Rain from %s", "Rain now", "until ~%s", "light", "moderate", "heavy"};
   if (lang == "fr") return fr;
   if (lang == "nl") return nl;
   if (lang == "en") return en;
@@ -100,7 +109,7 @@ static const Strings &S(const std::string &lang) {
 // ------------------------------------------------------------------ text helpers
 static int cap_h(Font *f, const Fonts &F) {
   if (f == F.clock) return 13;
-  if (f == F.big) return 10;
+  if (f == F.big || f == F.dest) return 10;
   if (f == F.mid) return 7;
   return 6;
 }
@@ -254,9 +263,13 @@ static void arrows_now(Display &it, int x_right, int y, Color c) {
 
 // ------------------------------------------------------------------ frame cache
 struct Row {
+  std::string key;        // group identity: "line|pointid" (STIB platform) or "~train"
+  std::string point;      // STIB pointid ("" for trains)
   std::string line, dest;
-  std::vector<int> mins;  // catchable, ascending
+  std::vector<int> mins;  // catchable departures within the preview, ascending (may be empty)
+  uint32_t next_epoch = 0;  // first departure beyond the preview (shown as HH:MM), 0 = unknown
   int walk = 0;           // walking minutes for this row (stop or station)
+  int order = 0;          // position of its stop in the configuration (train last)
   int delay_min = 0;
   bool canceled = false, train = false, stale = false;
 };
@@ -285,7 +298,7 @@ static int stop_walk(const Look &L, const std::string &point) {
   return L.walk_min;
 }
 
-// "60=Ambiorix;92=Schaerbeek": a listed line is only shown towards destinations containing
+// "71=Delta;81=Montgomery": a listed line is only shown towards destinations containing
 // one of its values (case-insensitive substring). Unlisted lines are unaffected.
 static bool dest_allowed(const Look &L, const std::string &line, const std::string &dest) {
   if (L.dest_filter.empty()) return true;
@@ -311,67 +324,168 @@ static bool dest_allowed(const Look &L, const std::string &line, const std::stri
   return !listed;
 }
 
-static void build_rows(Frame &fr, const Look &L, uint32_t now, size_t max_rows) {
+static int point_order(const Look &L, const std::string &point) {
+  auto t = split_csv(L.points);
+  for (size_t i = 0; i < t.size(); i++) {
+    size_t c = t[i].find(':');
+    if ((c == std::string::npos ? t[i] : t[i].substr(0, c)) == point) return (int) i;
+  }
+  return 500;
+}
+
+// Fixed rows (iteration 7): every line/direction that was seen keeps its row (in the order of
+// the configured stops, train last), even when it has no departure in the preview window.
+struct GroupMem {
+  std::string key, point, line, dest;
+  bool train;
+  int order, walk;
+  uint32_t seen;
+};
+inline std::vector<GroupMem> &groups() { static std::vector<GroupMem> g; return g; }
+
+// Persistence across reboots (wired up in YAML to a restore_value global):
+//   blob = "<cfg hash>\n" + per group "key\tline\tdest\ttrain\torder\twalk\n"
+inline std::string &groups_boot_blob() { static std::string b; return b; }
+inline std::function<void(const std::string &)> &groups_saver() {
+  static std::function<void(const std::string &)> f;
+  return f;
+}
+static uint32_t fnv1a(const std::string &s) {
+  uint32_t h = 2166136261u;
+  for (unsigned char c : s) { h ^= c; h *= 16777619u; }
+  return h;
+}
+static std::string groups_serialize(const std::string &ck) {
+  std::string o = std::to_string(fnv1a("v2|" + ck)) + "\n";
+  for (auto &g : groups())
+    o += g.key + "\t" + g.point + "\t" + g.line + "\t" + g.dest + "\t" + (g.train ? "1" : "0") + "\t" +
+         std::to_string(g.order) + "\t" + std::to_string(g.walk) + "\n";
+  return o;
+}
+static void groups_load(const std::string &blob, const std::string &ck, uint32_t now) {
+  size_t nl = blob.find('\n');
+  if (nl == std::string::npos || blob.substr(0, nl) != std::to_string(fnv1a("v2|" + ck))) return;
+  size_t pos = nl + 1;
+  while (pos < blob.size()) {
+    size_t end = blob.find('\n', pos);
+    if (end == std::string::npos) break;
+    std::vector<std::string> f;
+    size_t a = pos;
+    for (size_t i = pos; i <= end; i++)
+      if (i == end || blob[i] == '\t') { f.push_back(blob.substr(a, i - a)); a = i + 1; }
+    if (f.size() == 7) groups().push_back({f[0], f[1], f[2], f[3], f[4] == "1", atoi(f[5].c_str()), atoi(f[6].c_str()), now});
+    pos = end + 1;
+  }
+}
+
+static void build_rows(Frame &fr, const Look &L, uint32_t now) {
   fr.rows.clear();
+  auto &G = groups();
+  static std::string cfg_key;
+  static bool loaded = false;
+  std::string ck = L.points + "|" + L.dest_filter + "|" + L.aliases + (L.pin_train ? "T" : "t");
   if (!now) return;
-  Row pinned;
-  bool have_pinned = false;
+  if (ck != cfg_key) {
+    G.clear();
+    cfg_key = ck;
+    if (!loaded) { groups_load(groups_boot_blob(), ck, now); loaded = true; }  // rows survive reboots
+  }
+  size_t before = G.size();
+  std::vector<Row> cur;
+  auto find = [&](const std::string &key) -> Row * {
+    for (auto &r : cur)
+      if (r.key == key) return &r;
+    return nullptr;
+  };
   auto add = [&](const Departure &d, bool train, bool stale) {
-    int64_t secs = (int64_t) d.when + (train ? d.delay_s : 0) - (int64_t) now;
+    if (!dest_allowed(L, d.line, d.dest)) return;
+    uint32_t when = d.when + (train ? d.delay_s : 0);
+    int64_t secs = (int64_t) when - (int64_t) now;
     if (secs < -30) return;                                     // ghost / already gone
-    int mins = secs > 0 ? (int) (secs / 60) : 0;                // floor (secs >= 0 here)
+    int mins = secs > 0 ? (int) (secs / 60) : 0;
     int walk = train ? L.walk_train_min : stop_walk(L, d.point);
     if (walk > 0 && mins < walk - 1) return;                    // not catchable any more
-    if (!dest_allowed(L, d.line, d.dest)) return;
+    std::string dest = short_dest(d.dest, L.aliases);
+    // One row per line and platform (a platform serves one direction), like STIB stop displays;
+    // the destination shown is the next vehicle's (short workings, depot runs without a name).
+    std::string key = train ? std::string("~train") : d.line + "|" + d.point;
+    Row *r = find(key);
+    if (!r) {
+      Row n;
+      n.key = key; n.point = train ? "" : d.point; n.line = d.line; n.dest = dest; n.train = train;
+      n.walk = walk; n.stale = stale;
+      n.order = train ? 1000 : point_order(L, d.point);
+      cur.push_back(n);
+      r = &cur.back();
+    }
     if (mins > L.horizon_min) {
-      if (train && L.pin_train && !have_pinned && !d.canceled) {  // keep the next train anyway
-        pinned.line = d.line;
-        pinned.dest = short_dest(d.dest, L.aliases);
-        pinned.train = true;
-        pinned.walk = walk;
-        pinned.stale = stale;
-        pinned.mins = {std::min(mins, 99)};
-        pinned.delay_min = d.delay_s / 60;
-        have_pinned = true;
-      }
+      if (!r->next_epoch) r->next_epoch = when;
       return;
     }
-    std::string key = short_dest(d.dest, L.aliases);
-    for (auto &r : fr.rows)
-      if (r.line == d.line && r.dest == key && r.train == train) {
-        if (r.mins.size() < 3) r.mins.push_back(mins);
-        return;
-      }
-    Row r;
-    r.line = d.line;
-    r.dest = key;
-    r.train = train;
-    r.walk = walk;
-    r.stale = stale;
-    r.mins.push_back(mins);
-    r.delay_min = train ? d.delay_s / 60 : 0;
-    r.canceled = d.canceled;
-    fr.rows.push_back(r);
-  };
-  for (auto &d : fr.m.deps) add(d, false, fr.stib_stale);
-  for (auto &d : fr.m.trains) add(d, true, fr.train_stale);
-  for (auto &r : fr.rows) std::sort(r.mins.begin(), r.mins.end());
-  std::stable_sort(fr.rows.begin(), fr.rows.end(), [](const Row &a, const Row &b) { return a.mins[0] < b.mins[0]; });
-  // "Zug immer anzeigen": make sure one train row is visible (last slot), even beyond the horizon
-  bool train_visible = false;
-  for (size_t i = 0; i < fr.rows.size() && i < max_rows; i++) train_visible |= fr.rows[i].train;
-  if (L.pin_train && !train_visible && max_rows > 0) {
-    const Row *t = nullptr;
-    for (auto &r : fr.rows)
-      if (r.train) { t = &r; break; }
-    if (t || have_pinned) {
-      Row keep = t ? *t : pinned;
-      if (fr.rows.size() > max_rows) fr.rows.resize(max_rows);
-      if (fr.rows.size() == max_rows) fr.rows.back() = keep;
-      else fr.rows.push_back(keep);
+    if (r->mins.empty()) {  // the earliest departure defines what the row shows
+      r->line = d.line; r->walk = walk;
+      if (!dest.empty()) r->dest = dest;
+      r->delay_min = train ? d.delay_s / 60 : 0;
+      r->canceled = d.canceled;
     }
+    if (r->mins.size() < 3) r->mins.push_back(mins);
+  };
+  for (auto &d : fr.m.deps) add(d, false, fr.stib_stale);    // sorted by time
+  for (auto &d : fr.m.trains) add(d, true, fr.train_stale);  // sorted by time
+  // remember groups (so a line keeps its row overnight), forget after 24 h unseen
+  for (auto &r : cur) {
+    std::sort(r.mins.begin(), r.mins.end());
+    bool known = false;
+    for (auto &g : G)
+      if (g.key == r.key) {
+        if (r.dest.empty()) r.dest = g.dest;  // depot runs etc.: keep the last known direction name
+        g.seen = now; g.order = r.order; g.line = r.line; g.walk = r.walk;
+        if (!r.dest.empty()) g.dest = r.dest;
+        known = true;
+      }
+    if (!known) G.push_back({r.key, r.point, r.line, r.dest, r.train, r.order, r.walk, now});
   }
-  if (fr.rows.size() > max_rows) fr.rows.resize(max_rows);
+  G.erase(std::remove_if(G.begin(), G.end(), [&](const GroupMem &g) { return now - g.seen > 86400; }), G.end());
+  if (G.size() != before && groups_saver()) groups_saver()(groups_serialize(ck));
+  std::stable_sort(G.begin(), G.end(), [](const GroupMem &a, const GroupMem &b) {
+    return a.order != b.order ? a.order < b.order : a.dest < b.dest;
+  });
+  for (auto &g : G) {
+    Row *r = find(g.key);
+    if (g.train && !L.pin_train && (!r || r->mins.empty())) continue;  // "Zug immer anzeigen" off
+    if (r) { fr.rows.push_back(*r); continue; }
+    Row e;
+    e.key = g.key; e.point = g.point; e.line = g.line; e.dest = g.dest; e.train = g.train; e.walk = g.walk;
+    e.order = g.order;
+    e.stale = g.train ? fr.train_stale : fr.stib_stale;
+    fr.rows.push_back(e);
+  }
+}
+
+// Which rows are on screen: first (slots-1) fixed, the last slot rotates through the rest.
+// Returns the indexes and how many rotate (for the page dots).
+static std::vector<size_t> visible_rows(const Frame &fr, size_t slots, const Look &L, size_t &rot_n, size_t &rot_i) {
+  std::vector<size_t> v;
+  rot_n = rot_i = 0;
+  size_t n = fr.rows.size();
+  if (n <= slots) {
+    for (size_t i = 0; i < n; i++) v.push_back(i);
+    return v;
+  }
+  for (size_t i = 0; i + 1 < slots; i++) v.push_back(i);
+  rot_n = n - (slots - 1);
+  rot_i = (esphome::millis() / (uint32_t) (std::max(3, L.dwell_s) * 1000)) % rot_n;
+  v.push_back(slots - 1 + rot_i);
+  return v;
+}
+
+static std::string hhmm(uint32_t epoch) {
+  time_t t = epoch;
+  struct tm lt;
+  localtime_r(&t, &lt);
+  char b[8];
+  snprintf(b, sizeof(b), "%02d:%02d", lt.tm_hour, lt.tm_min);
+  return b;
 }
 
 static void build_pager(Frame &fr, const Look &L, const Fonts &F, uint32_t now) {
@@ -385,9 +499,30 @@ static void build_pager(Frame &fr, const Look &L, const Fonts &F, uint32_t now) 
     if (!c.expires || !now || c.expires > now) v.push_back({c.tag, c.text, c.prio, "c:" + c.key, 0});
   bool wx_ok = m.wx.valid && !stale_src(m, SRC_WX, now, 3 * 3600);
   if (wx_ok && m.wx.warning_level == 1) v.push_back({TAG_WX, std::string(s.kmi) + ": " + m.wx.warning, 2, "w:warn", 0});
-  if (wx_ok && m.wx.rain_in_h >= 0 && m.wx.rain_in_h <= 3) {
+  if (wx_ok && m.wx.rain_start) {
+    // KMI radar nowcast (10-min resolution): "Regen ab 22:40 (leicht), bis ca. 23:30"
+    auto hm = [](uint32_t e) {
+      time_t t = e;
+      struct tm lt;
+      localtime_r(&t, &lt);
+      char b[8];
+      snprintf(b, sizeof(b), "%02d:%02d", lt.tm_hour, lt.tm_min);
+      return std::string(b);
+    };
+    const char *intensity = m.wx.rain_peak >= 1.0f ? s.heavy : m.wx.rain_peak >= 0.3f ? s.moderate : s.light;
+    char b[96], e[32];
+    if (m.wx.raining_now || (now && m.wx.rain_start <= now)) snprintf(b, sizeof(b), "%s (%s)", s.rain_now, intensity);
+    else {
+      char f[32];
+      snprintf(f, sizeof(f), s.rain_from, hm(m.wx.rain_start).c_str());
+      snprintf(b, sizeof(b), "%s (%s)", f, intensity);
+    }
+    std::string text = b;
+    if (m.wx.rain_end) { snprintf(e, sizeof(e), s.rain_until, hm(m.wx.rain_end).c_str()); text += ", " + std::string(e); }
+    v.push_back({TAG_WX, text, (uint8_t) (m.wx.raining_now ? 1 : 2), "w:rain", 0});
+  } else if (wx_ok && m.wx.rain_in_h >= 1 && m.wx.rain_in_h <= 3) {
     char b[48];
-    snprintf(b, sizeof(b), s.rain_in, std::max(1, m.wx.rain_in_h));
+    snprintf(b, sizeof(b), s.rain_in, m.wx.rain_in_h);  // beyond the radar window: hourly forecast
     v.push_back({TAG_WX, b, 2, "w:rain", 0});
   }
   if (m.commute_dep && now && m.commute_dep > now && !stale_src(m, SRC_COMMUTE, now, 1200)) {
@@ -451,8 +586,8 @@ static void refresh_frame(const Fonts &F, const Look &L, uint32_t now) {
   fr.any_data = fr.m.ts[SRC_STIB] || fr.m.ts[SRC_TRAIN];
   // visible rows (same geometry as render()): a pinned train must land in a visible slot
   int vy0 = L.status_bar ? 11 : 0, vbottom = L.pager ? 53 : 64;
-  size_t max_rows = L.layout == LAYOUT_HERO ? 2 : (size_t) ((vbottom - vy0) / (L.layout == LAYOUT_COMPACT ? 10 : 14));
-  build_rows(fr, L, now, max_rows);
+  (void) vy0; (void) vbottom;
+  build_rows(fr, L, now);
   build_pager(fr, L, F, now);
   // P0 takeover: BE-Alert, HA critical, or KMI orange/red (fresh data only)
   std::string title, body;
@@ -490,6 +625,14 @@ static int walk_tag(Display &it, const Fonts &F, int x_right, int y, int walk) {
 // Standard row, 14 px: badge 22x12 | destination 6x10 | walk | first dep 9x15B right at 168 | second 191.
 static void dep_row(Display &it, const Fonts &F, int y, const Row &r, const Look &L) {
   badge(it, F, 1, y + 1, r.line);
+  if (r.mins.empty()) {  // fixed row without a departure in the preview: next time or dash
+    std::string t = r.next_epoch ? hhmm(r.next_epoch) : std::string("-");
+    txt(it, F, F.mid, 172, y + 4, t, C_SEC, 2);
+    int mw = text_w(F.mid, t) + 4;
+    int wt = L.show_walk ? walk_tag(it, F, 172 - mw - 2, y, r.walk) : 0;
+    txt(it, F, F.mid, 27, y + 4, fit_words(F.mid, r.dest, 172 - mw - wt - 8 - 27), C_SEC);
+    return;
+  }
   int m0 = r.mins[0];
   Color c0 = minute_color(m0, r, L);
   int mw;
@@ -522,13 +665,16 @@ static void dep_row(Display &it, const Fonts &F, int y, const Row &r, const Look
 // Compact row, 10 px: badge 19x9 (5x7) | destination 5x7 | first dep 6x10 right at 172 | second 191.
 static void dep_row_compact(Display &it, const Fonts &F, int y, const Row &r, const Look &L) {
   badge(it, F, 1, y, r.line, 19, 9, F.small);
-  int m0 = r.mins[0];
-  Color c0 = minute_color(m0, r, L);
-  std::string ms = r.canceled ? "X" : (m0 <= 0 ? "0" : std::to_string(m0)) + "'";
-  txt(it, F, F.mid, 172, y + 1, ms, r.canceled ? C_LEAVE : c0, 2);
-  if (r.train && r.delay_min > 0) txt(it, F, F.small, 191, y + 2, "+" + std::to_string(r.delay_min), C_LEAVE, 2);
-  else if (L.second && r.mins.size() > 1) txt(it, F, F.small, 191, y + 2, std::to_string(r.mins[1]) + "'", C_SEC, 2);
-  int dw = 172 - text_w(F.mid, ms) - 23 - 4;
+  bool empty = r.mins.empty();
+  int m0 = empty ? 0 : r.mins[0];
+  Color c0 = empty ? C_SEC : minute_color(m0, r, L);
+  std::string ms = empty ? (r.next_epoch ? hhmm(r.next_epoch) : std::string("-"))
+                         : r.canceled ? "X" : (m0 <= 0 ? "0" : std::to_string(m0)) + "'";
+  txt(it, F, F.mid, 172, y + 1, ms, (!empty && r.canceled) ? C_LEAVE : c0, 2);
+  if (!empty && r.train && r.delay_min > 0) txt(it, F, F.small, 191, y + 2, "+" + std::to_string(r.delay_min), C_LEAVE, 2);
+  else if (!empty && L.second && r.mins.size() > 1) txt(it, F, F.small, 191, y + 2, std::to_string(r.mins[1]) + "'", C_SEC, 2);
+  int wt = L.show_walk ? walk_tag(it, F, 172 - text_w(F.mid, ms) - 4, y - 2, r.walk) : 0;
+  int dw = 172 - text_w(F.mid, ms) - wt - 23 - 6;
   std::string n = fit_words(F.small, r.dest, dw);
   txt(it, F, F.small, 23, y + 2, n.empty() ? utf8_sub(r.dest, 0, dw / 5) : n, r.canceled ? C_SEC : C_WARM);
 }
@@ -571,7 +717,7 @@ static void pager(Display &it, const Fonts &F, const std::vector<PagerItem> &ite
     if (items[i].key == cur_key) { idx = i; found = true; break; }
   if (!found) { cur_key = items[0].key; idx = 0; started = ms; }
   const PagerItem *p = &items[idx];
-  const int avail = 182;
+  const int avail = 185;
   int over = p->width - avail;
   uint32_t need = L.dwell_s * 1000 + (over > 0 ? over * 40 + 2000 : 0);
   if (ms - started > need) {
@@ -581,13 +727,13 @@ static void pager(Display &it, const Fonts &F, const std::vector<PagerItem> &ite
     started = ms;
     over = p->width - avail;
   }
-  it.filled_rectangle(1, y + 1, 4, 7, tag_color(p->tag));
+  it.filled_rectangle(1, y + 1, 2, 6, tag_color(p->tag));   // category tag (colour = topic)
   int el = (int) (ms - started) - 1500;
   int off = (over > 0 && el > 0) ? std::min(over, el / 40) : 0;
   size_t first = off / 5;  // misc-fixed 5x7: 5 px per character
   std::string vis = utf8_sub(p->text, first, avail / 5 + 2);
-  it.start_clipping(esphome::display::Rect(8, y, avail, 10));
-  txt(it, F, F.small, 8 - (off % 5), y + 2, vis, C_PAGER);
+  it.start_clipping(esphome::display::Rect(6, y, avail, 9));
+  txt(it, F, F.small, 6 - (off % 5), y + 1, vis, Color(0xB0, 0xA9, 0x9E));
   it.end_clipping();
 }
 
@@ -629,10 +775,132 @@ static void night_screen(Display &it, const Fonts &F, const Frame &fr, const Loo
     snprintf(b, sizeof(b), "%d°", fr.m.wx.temp);
     txt(it, F, F.mid, 72, 31, b, C_NIGHT2);
   }
-  if (!fr.rows.empty()) {
-    const Row &r = fr.rows[0];
+  const Row *nr = nullptr;
+  for (auto &r : fr.rows)
+    if (!r.mins.empty() && (!nr || r.mins[0] < nr->mins[0])) nr = &r;
+  if (nr) {
+    const Row &r = *nr;
     badge(it, F, 100, 30, r.line, 21, 10, F.small, true);
     txt(it, F, F.mid, 140, 32, std::to_string(std::max(0, r.mins[0])) + "'", C_NIGHT, 2);
+  }
+}
+
+
+// ------------------------------------------------------------------ iteration 8 layouts
+static const Color C_WALK(0x9A, 0x94, 0x8C);
+
+// pedestrian glyph + minutes at a FIXED column (left aligned), only when the walk is > 1 min
+static void walk_fixed(Display &it, const Fonts &F, int x, int y, int walk) {
+  if (walk <= 1) return;
+  icon(it, x, y, "walk", 7, &C_WALK);
+  txt(it, F, F.small, x + 7, y + 1, std::to_string(walk), C_SEC);
+}
+
+// minutes (or arrows / X / HH:MM / dash) right-aligned at x_right; second value right at x2
+static void minutes_cell(Display &it, const Fonts &F, const Row &r, const Look &L, int x_right, int y, int x2,
+                         Font *big) {
+  if (r.mins.empty()) {
+    txt(it, F, F.mid, x2, y + 2, r.next_epoch ? hhmm(r.next_epoch) : std::string("-"), C_SEC, 2);
+    return;
+  }
+  int m0 = r.mins[0];
+  Color c = minute_color(m0, r, L);
+  if (r.canceled) txt(it, F, F.mid, x_right, y + 2, "X", C_LEAVE, 2);
+  else if (m0 <= 0) arrows_now(it, x_right, y, c);
+  else {
+    txt(it, F, big, x_right, y, std::to_string(m0), c, 2);
+    txt(it, F, F.small, x_right + 1, y, "'", c);
+  }
+  if (r.train && r.delay_min >= 3) txt(it, F, F.small, x2, y + 3, "+" + std::to_string(r.delay_min), C_LEAVE, 2);
+  else if (r.train && r.delay_min > 0) txt(it, F, F.small, x2, y + 3, "+" + std::to_string(r.delay_min), C_SEC, 2);
+  else if (L.second && r.mins.size() > 1) txt(it, F, F.small, x2, y + 3, std::to_string(r.mins[1]) + "'", C_SEC, 2);
+}
+
+// Slim status (9 px) for the 4-row layout: clock, date, weather icon always, temperature + range.
+static void status_slim(Display &it, const Fonts &F, const Model &m, const Look &L, const esphome::ESPTime &t,
+                        bool alert_dot, uint32_t now) {
+  const Strings &s = S(L.ui_lang);
+  char buf[32];
+  if (t.is_valid()) {
+    snprintf(buf, sizeof(buf), "%02d:%02d", t.hour, t.minute);
+    txt(it, F, F.small, 1, 1, buf, C_WARM);
+    snprintf(buf, sizeof(buf), "%s %d.%d.", s.wd[t.day_of_week - 1], t.day_of_month, t.month);
+    txt(it, F, F.small, 34, 1, buf, C_SEC);
+  }
+  if (alert_dot) it.filled_rectangle(95, 2, 3, 3, C_LEAVE);
+  if (m.wx.valid && !stale_src(m, SRC_WX, now, 3600)) {
+    icon(it, 130, 0, ww_condition(m.wx.ww, m.wx.night), 9);
+    if (m.wx.has_min && m.wx.has_max) snprintf(buf, sizeof(buf), "%d°  %d/%d°", m.wx.temp, m.wx.tmin, m.wx.tmax);
+    else snprintf(buf, sizeof(buf), "%d°", m.wx.temp);
+    txt(it, F, F.small, 191, 1, buf, C_WARM, 2);
+  }
+}
+
+// FOUR: 4 equal 12-px rows, every group with its destination.
+static void layout_four(Display &it, const Fonts &F, const Frame &fr, const Look &L, int y0) {
+  int bottom = L.pager ? 56 : 64;
+  size_t n = std::min<size_t>(fr.rows.size(), (bottom - y0) / 12);
+  for (size_t i = 0; i < n; i++) {
+    const Row &r = fr.rows[i];
+    int y = y0 + i * 12;
+    badge(it, F, 1, y + 1, r.line, 22, 10);
+    if (L.show_walk) walk_fixed(it, F, 124, y + 2, r.walk);
+    minutes_cell(it, F, r, L, 166, y + 1, 191, F.big);
+    int dw = (L.show_walk && r.walk > 1 ? 124 : 140) - 27 - 3;
+    txt(it, F, F.mid, 27, y + 3, fit_words(F.mid, r.dest, dw), (r.canceled || r.mins.empty()) ? C_SEC : C_WARM);
+  }
+}
+
+// PREMIUM: first two groups as large rows (9x15 destinations), next two side by side.
+static void layout_premium(Display &it, const Fonts &F, const Frame &fr, const Look &L, int y0) {
+  size_t i = 0;
+  for (; i < fr.rows.size() && i < 2; i++) {
+    const Row &r = fr.rows[i];
+    int y = y0 + i * 14;
+    badge(it, F, 1, y + 1, r.line);
+    bool w = L.show_walk && r.walk > 1;
+    if (w) walk_fixed(it, F, 122, y + 3, r.walk);
+    minutes_cell(it, F, r, L, 166, y + 1, 191, F.big);
+    int dw = (w ? 122 : 138) - 29 - 3;
+    std::string d = fit_words(F.dest, r.dest, dw);
+    Color dc = (r.canceled || r.mins.empty()) ? C_SEC : C_WARM;
+    if (!d.empty()) txt(it, F, F.dest, 29, y + 1, d, dc);
+    else txt(it, F, F.mid, 29, y + 3, fit_words(F.mid, r.dest, dw), dc);
+  }
+  // split row: up to two more groups (e.g. bus + train) without destination, always visible
+  int y = y0 + 30;
+  const int cells[2][4] = {{1, 29, 68, 88}, {98, 126, 166, 191}};  // badge x, walk x, minutes right, second right
+  for (size_t k = 0; k < 2 && i < fr.rows.size(); k++, i++) {
+    const Row &r = fr.rows[i];
+    badge(it, F, cells[k][0], y + 1, r.line);
+    if (L.show_walk) walk_fixed(it, F, cells[k][1], y + 3, r.walk);
+    minutes_cell(it, F, r, L, cells[k][2], y + 1, cells[k][3], F.big);
+  }
+}
+
+// HERO: two very large rows (10x20 minutes) for single-stop users.
+static void layout_hero(Display &it, const Fonts &F, const Frame &fr, const Look &L, int y0) {
+  for (size_t k = 0; k < fr.rows.size() && k < 2; k++) {
+    const Row &r = fr.rows[k];
+    int y = y0 + 1 + k * 21;
+    badge(it, F, 1, y + 2, r.line, 24, 14);
+    bool w = L.show_walk && r.walk > 1;
+    if (w) walk_fixed(it, F, 112, y + 6, r.walk);
+    if (r.mins.empty()) {
+      txt(it, F, F.mid, 191, y + 6, r.next_epoch ? hhmm(r.next_epoch) : std::string("-"), C_SEC, 2);
+    } else {
+      Color c = minute_color(r.mins[0], r, L);
+      if (r.canceled) txt(it, F, F.clock, 166, y + 3, "X", C_LEAVE, 2);
+      else if (r.mins[0] <= 0) arrows_now(it, 166, y + 4, c);
+      else {
+        txt(it, F, F.clock, 166, y + 3, std::to_string(r.mins[0]), c, 2);
+        txt(it, F, F.mid, 167, y + 3, "'", c);
+      }
+      if (r.train && r.delay_min > 0) txt(it, F, F.small, 191, y + 8, "+" + std::to_string(r.delay_min), r.delay_min >= 3 ? C_LEAVE : C_SEC, 2);
+      else if (L.second && r.mins.size() > 1) txt(it, F, F.small, 191, y + 8, std::to_string(r.mins[1]) + "'", C_SEC, 2);
+    }
+    txt(it, F, F.mid, 29, y + 6, fit_words(F.mid, r.dest, (w ? 112 : 128) - 29 - 3),
+        (r.canceled || r.mins.empty()) ? C_SEC : C_WARM);
   }
 }
 
@@ -673,38 +941,17 @@ static void render(Display &it, const Fonts &F, const Look &L, const esphome::ES
   }
 
   int y0 = 0;
-  if (L.status_bar) { status_bar(it, F, fr.m, L, t, !fr.p0_body.empty(), now); y0 = 11; }
-  const int bottom = L.pager ? 53 : 64;
+  if (L.status_bar) {
+    if (L.layout == LAYOUT_FOUR) { status_slim(it, F, fr.m, L, t, !fr.p0_body.empty(), now); y0 = 9; }
+    else { status_bar(it, F, fr.m, L, t, !fr.p0_body.empty(), now); y0 = 11; }
+  }
   const bool live = now && fr.any_data;
 
-  if (L.layout == LAYOUT_HERO) {
-    for (size_t i = 0; i < fr.rows.size() && i < 2; i++) {   // mockup D2: rows at 12 / 33
-      int y = y0 + 1 + i * 21;
-      const Row &r = fr.rows[i];
-      badge(it, F, 1, y + 2, r.line, 24, 14);
-      txt(it, F, F.mid, 27, y + 6, fit_words(F.mid, r.dest, 110), r.canceled ? C_SEC : C_WARM);
-      Color c = minute_color(r.mins[0], r, L);
-      if (r.canceled) txt(it, F, F.clock, 166, y + 3, "X", C_LEAVE, 2);
-      else if (r.mins[0] <= 0) arrows_now(it, 166, y + 4, c);
-      else {
-        txt(it, F, F.clock, 166, y + 3, std::to_string(r.mins[0]), c, 2);
-        txt(it, F, F.mid, 167, y + 3, "'", c);
-      }
-      if (r.train && r.delay_min > 0) txt(it, F, F.small, 191, y + 8, "+" + std::to_string(r.delay_min), C_LEAVE, 2);
-      else if (L.second && r.mins.size() > 1) txt(it, F, F.small, 191, y + 8, std::to_string(r.mins[1]) + "'", C_SEC, 2);
-    }
-  } else {
-    const bool compact = L.layout == LAYOUT_COMPACT;
-    const int pitch = compact ? 10 : 14;
-    size_t n = (bottom - y0) / pitch;
-    for (size_t i = 0; i < fr.rows.size() && i < n; i++) {
-      int y = y0 + i * pitch;
-      if (compact) dep_row_compact(it, F, y, fr.rows[i], L);
-      else dep_row(it, F, y, fr.rows[i], L);
-    }
-  }
+  if (L.layout == LAYOUT_PREMIUM) layout_premium(it, F, fr, L, y0);
+  else if (L.layout == LAYOUT_FOUR) layout_four(it, F, fr, L, y0);
+  else layout_hero(it, F, fr, L, y0);
   if (fr.rows.empty()) txt(it, F, F.mid, 96, y0 + 14, live ? s.no_deps : s.no_live, C_SEC, 1);
-  if (L.pager) pager(it, F, fr.pager, L, 54);
+  if (L.pager) pager(it, F, fr.pager, L, L.layout == LAYOUT_FOUR ? 56 : L.layout == LAYOUT_PREMIUM ? 55 : 54);
 }
 
-}  // namespace diele
+}  // namespace perron
