@@ -11,12 +11,12 @@
   const E = {
     key: T("STIB API-Schlüssel"), points: T("Haltestellen"), lines: T("Linienfilter"),
     station: T("Bahnhof"), tfilter: T("Zugfilter"), cfrom: T("Pendeln von"), cto: T("Pendeln nach"),
-    loc: T("Standort"), alias: T("Kurznamen"), night: T("Nachtzeit"), free: T("Freitext"),
+    loc: T("Standort"), dfilter: T("Zielfilter"), alias: T("Kurznamen"), night: T("Nachtzeit"), free: T("Freitext"),
     layout: SEL("Layout"), lang: SEL("Sprache"), nmode: SEL("Nachtmodus"),
     bright: N("Helligkeit"), nbright: N("Helligkeit Nacht"), walk: N("Gehzeit zur Haltestelle"), wtrain: N("Gehzeit zum Bahnhof"),
     horizon: N("Vorschau"), dwell: N("Infozeile Wechsel"),
     wx: SW("Wetter (KMI)"), bea: SW("BE-Alert"), disr: SW("STIB-Störungen"), news: SW("Schlagzeilen"),
-    second: SW("Zweite Abfahrt"), autoup: SW("Automatische Updates"), autob: SW("Automatische Helligkeit"), status: SW("Statusleiste"), pager: SW("Infozeile"), freeon: SW("Freitext anzeigen"),
+    second: SW("Zweite Abfahrt"), showwalk: SW("Gehzeit anzeigen"), pintrain: SW("Zug immer anzeigen"), autoup: SW("Automatische Updates"), autob: SW("Automatische Helligkeit"), status: SW("Statusleiste"), pager: SW("Infozeile"), freeon: SW("Freitext anzeigen"),
   };
   const enc = encodeURIComponent;
   const url = ([d, n]) => `/${d}/${enc(n)}`;
@@ -128,6 +128,7 @@
       h("details", {}, h("summary", {}, "Manuell eintragen"),
         field("Haltestellen (STIB-Bahnsteig-IDs)", "points", { ph: "z. B. 1234:1,1235:1,2345:5", hint: "Kommagetrennt, jede Richtung hat eine eigene ID. Optional :Minuten = Gehzeit zu genau dieser Haltestelle." }),
         field("Linienfilter", "lines", { ph: "leer = alle Linien", hint: "z. B. 92,60" }),
+        field("Zielfilter", "dfilter", { ph: "z. B. 71=Delta", hint: "Linie nur in Richtung dieser Ziele (Teil des Namens). Mehrere mit ; trennen." }),
         field("Standort (Breite,Länge)", "loc", { ph: "50.80,4.36", hint: "Für Wetter und BE-Alert. Leer = Brussels." })),
       range("Gehzeit (Standard für Haltestellen ohne eigene Angabe)", "walk", 0, 15, 1, " min"),
     ] },
@@ -136,6 +137,7 @@
       field("Bahnhof (iRail-ID)", "station", { ph: "BE.NMBS.0088…", hint: "Mit dem Standort-Assistenten auswählbar." }),
       field("Zugfilter", "tfilter", { ph: "z. B. p2 oder S5,S19", hint: "p2 = nur Gleis 2; Liniennamen oder Ziele, kommagetrennt." }),
       range("Gehzeit zum Bahnhof", "wtrain", 0, 30, 1, " min"),
+      toggle("Zug immer anzeigen", "pintrain", "Reserviert eine Zeile für den nächsten Zug (Zugfilter, z. B. stadteinwärts), auch wenn er später fährt."),
       field("Pendeln von (iRail-ID)", "cfrom", { ph: "BE.NMBS.0088…" }),
       field("Pendeln nach (iRail-ID)", "cto", { ph: "BE.NMBS.0088…" }),
       h("p", { class: "hint" }, "Auto-Fahrzeiten (Waze) und Kalender kommen über die Home-Assistant-Integration."),
@@ -154,7 +156,7 @@
       choice("Layout", "layout"), choice("Sprache", "lang"),
       toggle("Automatische Helligkeit", "autob", "Mit Lichtsensor (VEML7700): regelt zwischen Nacht- und Tageshelligkeit."),
       range("Helligkeit (maximal)", "bright", 5, 255, 5, ""),
-      toggle("Zweite Abfahrt anzeigen", "second"), toggle("Statusleiste (Uhr, Wetter)", "status"),
+      toggle("Zweite Abfahrt anzeigen", "second"), toggle("Gehzeit anzeigen (Symbol + Minuten)", "showwalk"), toggle("Statusleiste (Uhr, Wetter)", "status"),
       toggle("Infozeile (Störungen, Termine, Wetter …)", "pager"),
       range("Infozeile wechselt alle", "dwell", 3, 15, 1, " s"),
       range("Abfahrten anzeigen bis", "horizon", 15, 95, 5, " min"),

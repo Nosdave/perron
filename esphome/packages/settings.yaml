@@ -66,6 +66,16 @@ text:
     max_length: 64
     entity_category: config
   - platform: template
+    id: cfg_dest_filter
+    name: "Zielfilter"
+    icon: mdi:sign-direction
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 120
+    entity_category: config
+  - platform: template
     id: cfg_train_station
     name: "Bahnhof"
     icon: mdi:train
@@ -304,6 +314,20 @@ switch:
     restore_mode: RESTORE_DEFAULT_ON
     entity_category: config
   - platform: template
+    id: sw_show_walk
+    name: "Gehzeit anzeigen"
+    icon: mdi:walk
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+  - platform: template
+    id: sw_pin_train
+    name: "Zug immer anzeigen"
+    icon: mdi:train
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+  - platform: template
     id: sw_free
     name: "Freitext anzeigen"
     icon: mdi:message-text
@@ -358,6 +382,9 @@ interval:
           L.free_text = id(cfg_free_text).state;
           L.aliases = id(cfg_aliases).state;
           L.points = id(cfg_stib_points).state;
+          L.dest_filter = id(cfg_dest_filter).state;
+          L.show_walk = id(sw_show_walk).state;
+          L.pin_train = id(sw_pin_train).state;
           L.version++;
           diele::start();
 

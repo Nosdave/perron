@@ -65,6 +65,9 @@ struct Look {
   int night_from = 23 * 60, night_to = 6 * 60;  // minutes of day
   std::string aliases;       // "Montgomery=Montg.;Gare du Nord=Nord"
   std::string points;        // "1234:1,2345:5" -> per-stop walking minutes (default walk_min)
+  std::string dest_filter;   // "71=Delta;81=Montgomery" -> line only towards matching destinations
+  bool show_walk = true;     // pedestrian glyph + walking minutes in every row
+  bool pin_train = true;     // always keep one row for the next (filtered) train
   bool free_on = false;
   std::string free_text;
   uint32_t version = 0;      // bumped by the settings interval when anything changed
@@ -281,16 +284,57 @@ static int stop_walk(const Look &L, const std::string &point) {
   return L.walk_min;
 }
 
+// "71=Delta;81=Montgomery": a listed line is only shown towards destinations containing
+// one of its values (case-insensitive substring). Unlisted lines are unaffected.
+static bool dest_allowed(const Look &L, const std::string &line, const std::string &dest) {
+  if (L.dest_filter.empty()) return true;
+  auto lower = [](std::string x) {
+    for (auto &c : x) c = (char) tolower((unsigned char) c);
+    return x;
+  };
+  bool listed = false;
+  std::string d = lower(dest);
+  size_t pos = 0;
+  while (pos < L.dest_filter.size()) {
+    size_t end = L.dest_filter.find(';', pos);
+    if (end == std::string::npos) end = L.dest_filter.size();
+    std::string kv = L.dest_filter.substr(pos, end - pos);
+    size_t eq = kv.find('=');
+    if (eq != std::string::npos && kv.substr(0, eq) == line) {
+      listed = true;
+      std::string want = lower(kv.substr(eq + 1));
+      if (!want.empty() && d.find(want) != std::string::npos) return true;
+    }
+    pos = end + 1;
+  }
+  return !listed;
+}
+
 static void build_rows(Frame &fr, const Look &L, uint32_t now, size_t max_rows) {
   fr.rows.clear();
   if (!now) return;
+  Row pinned;
+  bool have_pinned = false;
   auto add = [&](const Departure &d, bool train, bool stale) {
     int64_t secs = (int64_t) d.when + (train ? d.delay_s : 0) - (int64_t) now;
     if (secs < -30) return;                                     // ghost / already gone
     int mins = secs > 0 ? (int) (secs / 60) : 0;                // floor (secs >= 0 here)
     int walk = train ? L.walk_train_min : stop_walk(L, d.point);
     if (walk > 0 && mins < walk - 1) return;                    // not catchable any more
-    if (mins > L.horizon_min) return;
+    if (!dest_allowed(L, d.line, d.dest)) return;
+    if (mins > L.horizon_min) {
+      if (train && L.pin_train && !have_pinned && !d.canceled) {  // keep the next train anyway
+        pinned.line = d.line;
+        pinned.dest = short_dest(d.dest, L.aliases);
+        pinned.train = true;
+        pinned.walk = walk;
+        pinned.stale = stale;
+        pinned.mins = {std::min(mins, 99)};
+        pinned.delay_min = d.delay_s / 60;
+        have_pinned = true;
+      }
+      return;
+    }
     std::string key = short_dest(d.dest, L.aliases);
     for (auto &r : fr.rows)
       if (r.line == d.line && r.dest == key && r.train == train) {
@@ -312,6 +356,20 @@ static void build_rows(Frame &fr, const Look &L, uint32_t now, size_t max_rows) 
   for (auto &d : fr.m.trains) add(d, true, fr.train_stale);
   for (auto &r : fr.rows) std::sort(r.mins.begin(), r.mins.end());
   std::stable_sort(fr.rows.begin(), fr.rows.end(), [](const Row &a, const Row &b) { return a.mins[0] < b.mins[0]; });
+  // "Zug immer anzeigen": make sure one train row is visible (last slot), even beyond the horizon
+  bool train_visible = false;
+  for (size_t i = 0; i < fr.rows.size() && i < max_rows; i++) train_visible |= fr.rows[i].train;
+  if (L.pin_train && !train_visible && max_rows > 0) {
+    const Row *t = nullptr;
+    for (auto &r : fr.rows)
+      if (r.train) { t = &r; break; }
+    if (t || have_pinned) {
+      Row keep = t ? *t : pinned;
+      if (fr.rows.size() > max_rows) fr.rows.resize(max_rows);
+      if (fr.rows.size() == max_rows) fr.rows.back() = keep;
+      else fr.rows.push_back(keep);
+    }
+  }
   if (fr.rows.size() > max_rows) fr.rows.resize(max_rows);
 }
 
@@ -390,7 +448,9 @@ static void refresh_frame(const Fonts &F, const Look &L, uint32_t now) {
   fr.stib_stale = stale_src(fr.m, SRC_STIB, now, 180);
   fr.train_stale = stale_src(fr.m, SRC_TRAIN, now, 300);
   fr.any_data = fr.m.ts[SRC_STIB] || fr.m.ts[SRC_TRAIN];
-  size_t max_rows = L.layout == LAYOUT_HERO ? 2 : 5;
+  // visible rows (same geometry as render()): a pinned train must land in a visible slot
+  int vy0 = L.status_bar ? 11 : 0, vbottom = L.pager ? 53 : 64;
+  size_t max_rows = L.layout == LAYOUT_HERO ? 2 : (size_t) ((vbottom - vy0) / (L.layout == LAYOUT_COMPACT ? 10 : 14));
   build_rows(fr, L, now, max_rows);
   build_pager(fr, L, F, now);
   // P0 takeover: BE-Alert, HA critical, or KMI orange/red (fresh data only)
@@ -416,7 +476,16 @@ static Color minute_color(int m, const Row &r, const Look &L) {
   return (m <= r.walk) ? C_LEAVE : C_CATCH;
 }
 
-// Standard row, 14 px: badge 22x12 | destination 6x10 | first dep 9x15B right at 168 | second 191.
+// Walking time (iteration 6): pedestrian glyph + minutes, dim, right-aligned at x_right. Returns width.
+static int walk_tag(Display &it, const Fonts &F, int x_right, int y, int walk) {
+  std::string t = std::to_string(walk);
+  int tw = text_w(F.small, t);
+  txt(it, F, F.small, x_right, y + 4, t, C_SEC, 2);
+  icon(it, x_right - tw - 6, y + 3, "walk", 7, &C_SEC);
+  return tw + 6;
+}
+
+// Standard row, 14 px: badge 22x12 | destination 6x10 | walk | first dep 9x15B right at 168 | second 191.
 static void dep_row(Display &it, const Fonts &F, int y, const Row &r, const Look &L) {
   badge(it, F, 1, y + 1, r.line);
   int m0 = r.mins[0];
@@ -436,7 +505,8 @@ static void dep_row(Display &it, const Fonts &F, int y, const Row &r, const Look
   }
   if (r.train && r.delay_min > 0) txt(it, F, F.small, 191, y + 4, "+" + std::to_string(r.delay_min), C_LEAVE, 2);
   else if (L.second && r.mins.size() > 1) txt(it, F, F.small, 191, y + 4, std::to_string(r.mins[1]) + "'", C_SEC, 2);
-  int dw = std::min(116, 168 - mw - 27 - 4);
+  int wt = L.show_walk ? walk_tag(it, F, 168 - mw - 5, y, r.walk) : 0;
+  int dw = std::min(116, 168 - mw - 5 - wt - 4 - 27);
   std::string n = fit_words(F.mid, r.dest, dw);
   Color dc = r.canceled ? C_SEC : C_WARM;
   if (!n.empty()) {
