@@ -19,7 +19,18 @@ display:
     layout: HORIZONTAL
     brightness: 96        # Start; zur Laufzeit via hub75.set_brightness
     bit_depth: 6          # 4-12; in Phase 2 tunen
-    update_interval: 1s   # TODO Phase 2: min_refresh_rate / Flimmern tunen
+    # Panel-Refresh und Neuzeichnen entkoppelt (Smoke-Test 18.10.):
+    # update_interval koppelt sonst die Refresh-Rate an (1s -> 40 Hz Flackern,
+    # 16ms ohne double_buffer -> Schwarz-Blitz bei jedem Neuzeichnen).
+    update_interval: never  # Neuzeichnen per interval unten
+    min_refresh_rate: 100   # Panels fest mit >=100 Hz ansteuern
+    double_buffer: true     # im Hintergrund zeichnen, dann umschalten
     lambda: |-
       // TODO Phase 2/4: Widget-Zonen (Uhr/Wetter | Tram/Bus | Zug/Waze/Trip/Alert)
       it.printf(2, 2, id(font_small), "diele-board OK");
+
+# Inhalt 1x pro Sekunde neu zeichnen (Uhr), unabhängig vom Panel-Refresh.
+interval:
+  - interval: 1s
+    then:
+      - component.update: matrix

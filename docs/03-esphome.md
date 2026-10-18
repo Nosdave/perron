@@ -30,7 +30,9 @@ display:
     layout: HORIZONTAL
     brightness: 128         # 0-255 (Start; zur Laufzeit via hub75.set_brightness)
     bit_depth: 6            # 4-12 (Default 8); 6 = guter Kompromiss Speicher/Farbe
-    # update_interval / min_refresh_rate (40-200 Hz) im Smoke-Test tunen
+    update_interval: never  # Neuzeichnen per interval (1 s) -> component.update
+    min_refresh_rate: 100   # fester Panel-Refresh; sonst aus update_interval abgeleitet (1s = 40 Hz = Flackern)
+    double_buffer: true
     lambda: |-
       // Widget-Zonen rendern (siehe docs/02-architecture.md)
 ```

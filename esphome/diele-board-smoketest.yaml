@@ -26,7 +26,7 @@ esphome:
   friendly_name: "Diele Smoke Test"
 
 esp32:
-  board: adafruit_matrixportal_s3
+  board: adafruit_matrixportal_esp32s3
   framework:
     type: esp-idf
 
@@ -52,7 +52,10 @@ display:
     layout: HORIZONTAL
     brightness: 50        # ~20 % – bewusst niedrig beim ersten Anschalten (Strom begrenzen)
     bit_depth: 6
-    update_interval: 1s
+    # Panel-Refresh (Hardware/DMA) und Neuzeichnen entkoppeln:
+    update_interval: never  # Inhalt wird per interval unten 1x/s neu gezeichnet
+    min_refresh_rate: 100   # Panels fest mit >=100 Hz ansteuern (kein sichtbares Flackern)
+    double_buffer: true     # im Hintergrund zeichnen, dann umschalten (kein Schwarz-Blitz)
     lambda: |-
       const int PW = 64;                 // Panelbreite
       int n = it.get_width() / PW;       // Anzahl erkannter Panels (aus layout_cols)
@@ -84,3 +87,9 @@ display:
         int v = (g * 255) / it.get_width();
         it.line(g, it.get_height() - 4, g, it.get_height() - 1, Color(v, v, v));
       }
+
+# Inhalt 1x pro Sekunde neu zeichnen (unabhängig vom Panel-Refresh).
+interval:
+  - interval: 1s
+    then:
+      - component.update: matrix
