@@ -812,6 +812,22 @@ inline void push_card(const std::string &key, const std::string &text, int tag, 
   if (v.size() > 12) v.erase(v.begin());
 }
 
+// Demo for the "Warnung testen" button: goes through the exact BE-Alert display path
+// (source 1) and expires after ttl_s. The next BE-Alert fetch may clear it earlier.
+inline void test_bealert(int ttl_s) {
+  Lock l;
+  auto &al = model_storage().alerts;
+  Alert a;
+  a.text = "TEST - Dies ist ein Test der Warnanzeige. Bei einer echten BE-Alert-Meldung fuer "
+           "Ihren Standort erscheint hier deren Text. Keine Gefahr.";
+  a.level = 3;
+  a.source = 1;
+  uint32_t now = now_epoch();
+  a.expires = now ? now + ttl_s : 0;
+  al.insert(al.begin(), a);
+  model_storage().gen++;
+}
+
 inline void clear_ha_alert() {
   Lock l;
   auto &al = model_storage().alerts;

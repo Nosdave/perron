@@ -77,7 +77,7 @@ struct Look {
   uint32_t version = 0;      // bumped by the settings interval when anything changed
 };
 
-struct Fonts { Font *small, *mid, *big, *clock, *dest; };
+struct Fonts { Font *small, *mid, *big, *clock, *dest, *tiny; };
 
 inline Look &look() { static Look l; return l; }  // main-loop only (set by settings interval)
 
@@ -111,6 +111,7 @@ static int cap_h(Font *f, const Fonts &F) {
   if (f == F.clock) return 13;
   if (f == F.big || f == F.dest) return 10;
   if (f == F.mid) return 7;
+  if (f == F.tiny) return 5;
   return 6;
 }
 
@@ -786,6 +787,19 @@ static void night_screen(Display &it, const Fonts &F, const Frame &fr, const Loo
 }
 
 
+
+// Delay (trains only - STIB real-time minutes already include delays): white "+N" on a red
+// chip, the same in every layout. Red FILL = service problem; red TEXT minutes = leave now.
+static const Color C_DELAY_BG(0xC8, 0x1E, 0x14);
+static const Color C_SNCB_BG(0x0A, 0x1E, 0x46);  // SNCB departure-board navy (train rows/cells)
+static int delay_chip(Display &it, const Fonts &F, int x_right, int y, int delay_min) {
+  std::string d = "+" + std::to_string(delay_min);
+  int w = text_w(F.tiny, d) + 3;
+  it.filled_rectangle(x_right - w + 1, y, w, 7, C_DELAY_BG);
+  txt(it, F, F.tiny, x_right - 1, y + 1, d, Color(255, 255, 255), 2);
+  return w;
+}
+
 // ------------------------------------------------------------------ iteration 8 layouts
 static const Color C_WALK(0x9A, 0x94, 0x8C);
 
@@ -811,8 +825,7 @@ static void minutes_cell(Display &it, const Fonts &F, const Row &r, const Look &
     txt(it, F, big, x_right, y, std::to_string(m0), c, 2);
     txt(it, F, F.small, x_right + 1, y, "'", c);
   }
-  if (r.train && r.delay_min >= 3) txt(it, F, F.small, x2, y + 3, "+" + std::to_string(r.delay_min), C_LEAVE, 2);
-  else if (r.train && r.delay_min > 0) txt(it, F, F.small, x2, y + 3, "+" + std::to_string(r.delay_min), C_SEC, 2);
+  if (r.train && r.delay_min > 0) delay_chip(it, F, x2, y + 2, r.delay_min);
   else if (L.second && r.mins.size() > 1) txt(it, F, F.small, x2, y + 3, std::to_string(r.mins[1]) + "'", C_SEC, 2);
 }
 
@@ -843,11 +856,54 @@ static void layout_four(Display &it, const Fonts &F, const Frame &fr, const Look
   for (size_t i = 0; i < n; i++) {
     const Row &r = fr.rows[i];
     int y = y0 + i * 12;
+    if (r.train) it.filled_rectangle(0, y, 192, 12, C_SNCB_BG);  // SNCB departure-board style
     badge(it, F, 1, y + 1, r.line, 22, 10);
     if (L.show_walk) walk_fixed(it, F, 124, y + 2, r.walk);
     minutes_cell(it, F, r, L, 166, y + 1, 191, F.big);
     int dw = (L.show_walk && r.walk > 1 ? 124 : 140) - 27 - 3;
-    txt(it, F, F.mid, 27, y + 3, fit_words(F.mid, r.dest, dw), (r.canceled || r.mins.empty()) ? C_SEC : C_WARM);
+    txt(it, F, F.mid, 27, y + 3, fit_words(F.mid, r.dest, dw),
+        (r.canceled || r.mins.empty()) ? C_SEC : (r.train ? Color(255, 255, 255) : C_WARM));
+  }
+}
+
+
+// Compact cell: badge 18 | destination (4x6) | walk (glyph + 4x6) | minutes 9x15B | [delay].
+static void split_cell(Display &it, const Fonts &F, const Row &r, const Look &L, int x0, int x1, int y) {
+  if (r.train) it.filled_rectangle(x0 - 2, y, x1 - x0 + 3, 14, C_SNCB_BG);
+  badge(it, F, x0, y + 1, r.line, 18, 12);
+  int right = x1;
+  int mr;
+  if (r.mins.empty()) {
+    std::string t = r.next_epoch ? hhmm(r.next_epoch) : std::string("-");
+    txt(it, F, F.mid, right, y + 4, t, C_SEC, 2);
+    mr = right - text_w(F.mid, t) - 1;
+  } else {
+    if (r.train && r.delay_min > 0) right -= delay_chip(it, F, x1, y + 4, r.delay_min) + 2;
+    int m0 = r.mins[0];
+    Color c = minute_color(m0, r, L);
+    int xr = right - 3;
+    if (r.canceled) { txt(it, F, F.mid, xr, y + 3, "X", C_LEAVE, 2); mr = xr - 8; }
+    else if (m0 <= 0) { arrows_now(it, xr, y + 1, c); mr = xr - 16; }
+    else {
+      std::string ms = std::to_string(m0);
+      txt(it, F, F.big, xr, y + 1, ms, c, 2);
+      txt(it, F, F.small, xr + 1, y + 1, "'", c);
+      mr = xr - text_w(F.big, ms);
+    }
+  }
+  int wx = mr - 3;
+  if (L.show_walk && r.walk > 1) {
+    std::string wt = std::to_string(r.walk);
+    wx = mr - 3 - (6 + text_w(F.tiny, wt));
+    icon(it, wx, y + 3, "walk", 7, &C_WALK);
+    txt(it, F, F.tiny, wx + 6, y + 4, wt, C_SEC);
+  }
+  int dw = wx - (x0 + 21) - 1;
+  if (dw > 8) {
+    std::string d = fit_words(F.tiny, r.dest, dw);
+    if (d.empty()) d = utf8_sub(r.dest, 0, dw / 4);
+    Color dc = r.mins.empty() ? C_SEC : (r.train ? Color(255, 255, 255) : C_WARM);
+    txt(it, F, F.tiny, x0 + 21, y + 4, d, dc);
   }
 }
 
@@ -867,15 +923,12 @@ static void layout_premium(Display &it, const Fonts &F, const Frame &fr, const L
     if (!d.empty()) txt(it, F, F.dest, 29, y + 1, d, dc);
     else txt(it, F, F.mid, 29, y + 3, fit_words(F.mid, r.dest, dw), dc);
   }
-  // split row: up to two more groups (e.g. bus + train) without destination, always visible
+  // split row (iteration 9): next two groups side by side, each with a compact destination;
+  // a train cell uses the SNCB departure-board style (navy, white text, yellow delay).
   int y = y0 + 30;
-  const int cells[2][4] = {{1, 29, 68, 88}, {98, 126, 166, 191}};  // badge x, walk x, minutes right, second right
-  for (size_t k = 0; k < 2 && i < fr.rows.size(); k++, i++) {
-    const Row &r = fr.rows[i];
-    badge(it, F, cells[k][0], y + 1, r.line);
-    if (L.show_walk) walk_fixed(it, F, cells[k][1], y + 3, r.walk);
-    minutes_cell(it, F, r, L, cells[k][2], y + 1, cells[k][3], F.big);
-  }
+  const int cells[2][2] = {{1, 82}, {88, 191}};
+  for (size_t k = 0; k < 2 && i < fr.rows.size(); k++, i++)
+    split_cell(it, F, fr.rows[i], L, cells[k][0], cells[k][1], y);
 }
 
 // HERO: two very large rows (10x20 minutes) for single-stop users.
@@ -896,7 +949,7 @@ static void layout_hero(Display &it, const Fonts &F, const Frame &fr, const Look
         txt(it, F, F.clock, 166, y + 3, std::to_string(r.mins[0]), c, 2);
         txt(it, F, F.mid, 167, y + 3, "'", c);
       }
-      if (r.train && r.delay_min > 0) txt(it, F, F.small, 191, y + 8, "+" + std::to_string(r.delay_min), r.delay_min >= 3 ? C_LEAVE : C_SEC, 2);
+      if (r.train && r.delay_min > 0) delay_chip(it, F, 191, y + 7, r.delay_min);
       else if (L.second && r.mins.size() > 1) txt(it, F, F.small, 191, y + 8, std::to_string(r.mins[1]) + "'", C_SEC, 2);
     }
     txt(it, F, F.mid, 29, y + 6, fit_words(F.mid, r.dest, (w ? 112 : 128) - 29 - 3),

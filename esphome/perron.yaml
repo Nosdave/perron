@@ -49,6 +49,10 @@ esp32:
       # TLS-Puffer/RSA-Rechnungen in PSRAM: der interne RAM ist durch die HUB75-DMA-Puffer
       # (double_buffer) knapp -> sonst MBEDTLS_ERR_MPI_ALLOC_FAILED beim Zertifikatscheck.
       CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC: y
+      # malloc() > 4 KB automatically from PSRAM: keeps internal RAM free for DMA/TLS sockets
+      # (the RMI chain failed with ~35 KB internal heap left).
+      CONFIG_SPIRAM_USE_MALLOC: y
+      CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL: "4096"
 
 # MatrixPortal S3 = ESP32-S3 N8R2 -> 2 MB Quad-PSRAM.
 psram:
