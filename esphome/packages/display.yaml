@@ -15,6 +15,10 @@ font:
     id: f_mid
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
+  - file: "fonts/4x6.bdf"          # kompakte Ziele in der geteilten Zeile
+    id: f_tiny
+    glyphsets: [GF_Latin_Core]
+    ignore_missing_glyphs: true
   - file: "fonts/9x15.bdf"         # große Zielnamen (Layout Premium)
     id: f_dest
     glyphsets: [GF_Latin_Core]
@@ -57,7 +61,7 @@ display:
       const auto WHITE = Color(255, 255, 255);
       const auto DIM   = Color(120, 120, 120);
       const auto AMBER = Color(255, 150, 0);
-      static const perron::Fonts F{id(f_small), id(f_mid), id(f_big), id(f_clock), id(f_dest)};
+      static const perron::Fonts F{id(f_small), id(f_mid), id(f_big), id(f_clock), id(f_dest), id(f_tiny)};
       it.fill(Color::BLACK);
 
       auto *wifi = wifi::global_wifi_component;

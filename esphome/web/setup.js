@@ -150,6 +150,7 @@
       field("STIB API-Schlüssel", "key", { type: "password", hint: "Kostenlos auf data.belgianmobility.io. Ohne Schlüssel gilt ein knappes gemeinsames Limit pro Internetanschluss." }),
       toggle("Wetter vom KMI/IRM", "wx"),
       toggle("BE-Alert Warnungen für deinen Standort", "bea"),
+      h("button", { class: "ghost", onclick: async () => { await post(`/button/${enc("Warnung testen")}/press`); toast("Testwarnung läuft (60 s)"); } }, "Warnanzeige testen"),
       toggle("STIB-Störungen deiner Linien", "disr"),
       toggle("Schlagzeilen (Brussels Times)", "news"),
       toggle("Freitext anzeigen", "freeon", "Wird von Home Assistant oder hier gesetzt."),

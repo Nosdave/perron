@@ -5,6 +5,7 @@
 import os
 from PIL import Image
 from render import Canvas, BLACK, WHITE
+import scenes
 from scenes import GTFS, WARM, SEC, CATCH, LEAVE, TAGS, fit_words, HERE
 
 RED_PROBLEM = (0xFF, 0x3B, 0x1F)
@@ -120,3 +121,46 @@ if __name__ == "__main__":
         out.paste(i, (0, y)); y += i.height + 14
     out.save(os.path.join(HERE, "out", "v8_sheet.png"))
     print("ok")
+
+
+# ---- iteration 9: split cells with destinations (4x6), train cell in SNCB board style ----
+SNCB_BG = (0x0A, 0x1E, 0x46)      # SNCB departure-board navy
+SNCB_YEL = (0xFF, 0xD2, 0x00)     # SNCB yellow for changes/delays
+
+
+def split_cell(c, x0, x1, y, line, dest, m, walk_min, delay=0, sncb=False):
+    """Compact cell: badge 18 | destination (4x6) | walk (glyph + 4x6) | minutes 9x15B | [delay]."""
+    if sncb:
+        c.rect(x0 - 2, y, x1 - x0 + 3, 14, SNCB_BG)
+    badge(c, x0, y + 1, line, w=18)
+    right = x1
+    if delay:
+        right -= c.text(x1, y + 5, f"+{delay}", SNCB_YEL, font="tiny", align="right") + 2
+    mr = right - 3                                # minutes right edge, apostrophe after
+    mins(c, mr, y + 1, m, walk_min)
+    mw = c.width(str(m), "big")
+    wt = str(walk_min)
+    wx = mr - mw - 3 - (6 + c.width(wt, "tiny"))
+    c.icon(wx, y + 3, "walk", size=7, tint=(0x9A, 0x94, 0x8C))
+    c.text(wx + 6, y + 4, wt, SEC, font="tiny")
+    dest_w = wx - (x0 + 21) - 1
+    d = scenes.fit_words(c, dest, dest_w, "tiny") or dest[: dest_w // 4]
+    c.text(x0 + 21, y + 4, d, WHITE if sncb else scenes.WARM, font="tiny")
+
+
+def B9(c):
+    status(c)
+    for i, (d, m) in enumerate([("Montgomery", [3, 16]), ("Marius Renard", [22, 26])]):
+        y = 11 + i * 14
+        badge(c, 1, y + 1, "81")
+        c.text(29, y + 1, scenes.fit_words(c, d, 105, "dest") or d, scenes.WARM, font="dest")
+        mins(c, 166, y + 1, m[0], 1)
+        c.text(191, y + 4, f"{m[1]}'", scenes.SEC, align="right")
+    split_cell(c, 1, 82, 41, "4", "Nord", 7, 5)
+    split_cell(c, 88, 191, 41, "S5", "Mechelen", 14, 12, delay=3, sncb=True)
+    pager(c, 56, "wx", "Rain 17:40-18:20, light")
+
+
+if __name__ == "__main__":
+    c = Canvas(); B9(c); c.save_led(os.path.join(HERE, "out", "v9_B.png"))
+    print("v9")

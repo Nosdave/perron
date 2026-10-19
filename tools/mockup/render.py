@@ -33,6 +33,7 @@ def _load_bdf(name: str) -> ImageFont.ImageFont:
 
 # name -> (font, cap_top) ; cap_top = first ink row of capitals inside the glyph cell (measured)
 FONTS = {
+    "tiny": (_load_bdf("4x6"), 0),      # caps 5 px, 4 px advance -> compact destinations
     "small": (_load_bdf("5x7"), 0),     # caps 6 px, 5 px advance  -> names, labels, minutes
     "mid": (_load_bdf("6x10"), 1),      # caps 7 px, 6 px advance  -> emphasis
     "big": (_load_bdf("9x15B"), 2),     # caps 10 px, 9 px advance -> big minutes / temp

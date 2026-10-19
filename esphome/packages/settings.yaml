@@ -160,6 +160,15 @@ text:
     initial_value: ""
     max_length: 120
 
+button:
+  - platform: template
+    id: btn_test_alert
+    name: "Warnung testen"
+    icon: mdi:alarm-light-outline
+    entity_category: config
+    on_press:
+      - lambda: 'perron::test_bealert(60);'
+
 select:
   - platform: template
     id: cfg_layout
