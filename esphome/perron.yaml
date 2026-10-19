@@ -166,6 +166,10 @@ sensor:
     entity_category: diagnostic
 
 text_sensor:
+  - platform: debug
+    reset_reason:
+      name: "Neustart-Grund"
+      entity_category: diagnostic
   - platform: wifi_info
     ip_address:
       id: wifi_ip

@@ -150,7 +150,7 @@ text:
     initial_value: "23:00-06:00"
     max_length: 16
     entity_category: config
-  # Schlagzeilen-Quellen (max. 3), Kürzel siehe Einstellungsseite / docs: bt btb bteu btw bx1 bul vrt
+  # Schlagzeilen-Quellen (max. 6), Kürzel siehe Einstellungsseite / docs: bt btb bteu btw bx1 bul vrt
   # llb en enb pol bbc ts tsa orf
   - platform: template
     id: cfg_news_src

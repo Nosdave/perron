@@ -562,10 +562,10 @@ static void build_pager(Frame &fr, const Look &L, const Fonts &F, uint32_t now) 
     v.push_back({TAG_COMMUTE, b, 2, "pt", 0});
   }
   if (L.free_on && !L.free_text.empty()) v.push_back({TAG_HA, led_safe(L.free_text), 3, "free", 0});
-  // headlines: 3 per cycle (one per selected source, they are interleaved), rotating
+  // headlines: 4 per cycle from the interleaved sources, rotating every 5 min
   if (!m.news.empty()) {
     size_t base = (now / 300) % m.news.size();
-    for (size_t i = 0; i < std::min<size_t>(3, m.news.size()); i++) {
+    for (size_t i = 0; i < std::min<size_t>(4, m.news.size()); i++) {
       const std::string &n = m.news[(base + i) % m.news.size()];
       v.push_back({TAG_NEWS, n, 3, "n:" + n, 0});
     }
