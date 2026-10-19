@@ -471,6 +471,11 @@ inline bool fetch_stib(const Config &c) {
     }
   }
   std::sort(out.begin(), out.end(), [](const Departure &a, const Departure &b) { return a.when < b.when; });
+  // the feed sometimes lists the same vehicle twice (same platform, line, destination, time)
+  for (size_t i = 0; i < out.size(); i++)
+    for (size_t j = i + 1; j < out.size() && out[j].when - out[i].when < 30;)
+      if (out[j].point == out[i].point && out[j].line == out[i].line && out[j].dest == out[i].dest) out.erase(out.begin() + j);
+      else j++;
   {
     Lock l;
     model_storage().deps = std::move(out);

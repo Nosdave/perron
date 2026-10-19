@@ -30,6 +30,12 @@ static const Icon ICONS16[] = {
   {"snowy", 16, 16, "......................WWWW...........WWWWWW........WWWWWWWWWW.....WWWWWWWWWWWW...GWWWWWWWWWWWWG...GGGGGGGGGGGG.....................C......C.......CCC....CCC.......C......C............C......C.......CCC....CCC.......C......C................................."},
   {"snowy-rainy", 16, 16, "......................WWWW...........WWWWWW........WWWWWWWWWW.....WWWWWWWWWWWW...GWWWWWWWWWWWWG...GGGGGGGGGGGG.....................C.....B........CCC...B..........C...B....C..............CCC......B.......C......B............................................"},
   {"fog", 16, 16, "......................................WWWW...........WWWWWW........WWWWWWWWWW.....WWWWWWWWWWWW...................FFFFFFFFFFFFF.....................FFFFFFFFFFFF..................FFFFFFFFFFFFF.....................FFFFFFFFFF..................................."},
+  {"washer", 16, 16, ".WWWWWWWWWWWWWW.W..............WW.WW.W.....WWW.WW..............WWWWWWWWWWWWWWWWWW..............WW.....WWWW.....WW...WW....WW...WW...W......W...WW..W...WW...W..WW..W..W..W..W..WW...W......W...WW...WW....WW...WW.....WWWW.....WW..............W.WWWWWWWWWWWWWW."},
+  {"bell", 16, 16, ".......WW.............WWWW...........W....W.........W......W........W......W.......W........W......W........W......W........W......W........W.....W..........W....W..........W...W............W.WWWWWWWWWWWWWWWW......................WWWW.............WW......."},
+  {"person", 16, 16, "......WWWW...........W....W.........W......W........W......W........W......W.........W....W...........WWWW..........................WWWWWWWW.......W........W.....W..........W....W..........W...W............W..W............W..W............W.WWWWWWWWWWWWWWWW"},
+  {"car", 16, 16, "....................................WWWWWWWW.......W...W....W.....W....W.....W...W.....W......W.WWWWWWWWWWWWWWWWW..............WW.WW........WW.WW..............WWWWWWWWWWWWWWWWW..WWW......WWW....WWW......WWW.................................................."},
+  {"battery", 16, 16, "................................................WWWWWWWWWWWWWW..W............W..W.WWWWWWWWW..WWWW.WWWWWWWWW..WWWW.WWWWWWWWW..WWWW.WWWWWWWWW..WWWW.WWWWWWWWW..WWWW............W..WWWWWWWWWWWWWW.................................................................."},
+  {"smoke", 16, 16, "....WW....WW.......W..W..W..W.......WW....WW..........WW.............W..W.............WW........................WWWWWWWWWWWWWWWWW..............WW..WWWW..WWWW..WW..............W.WWWWWWWWWWWWWW................................................................."},
 };
 static const Icon ICONS9[] = {
   {"sunny", 9, 9, "....Y.....Y.....Y....OOO.....OYYYO..YYOYYYOYY..OYYYO.....OOO....Y.....Y.....Y...."},
@@ -49,5 +55,13 @@ static const Icon ICONS7[] = {
   {"warn", 7, 7, "...R.....RKR....RKR...RRKRR..RRRRR.RRRKRRRRRRRRRR"},
   {"arrow-right", 7, 7, "...A.......A.......A.AAAAAAA.....A.....A.....A..."},
   {"wifi-off", 7, 7, "R.....R.R...R...R.R.....R.....R.R...R...R.R.....R"},
+  {"bell", 5, 7, "..W...WWW..WWW..WWW.WWWWW.......W.."},
+  {"washer", 5, 7, "WWWWWW.W.WWWWWWW.W.WW...WW.W.WWWWWW"},
+  {"car", 5, 7, "......WWW.W...WWWWWWW.W.WWWWWW.W.W."},
+  {"battery", 5, 7, "..W..WWWWWW...WWWWWWWWWWWWWWWWWWWWW"},
+  {"door", 5, 7, "WWWWWW...WW...WW..WWW...WW...WWWWWW"},
+  {"sun", 5, 7, "W.W.W.WWW.WW.WW.WWW.W.W.W.........."},
+  {"plug", 5, 7, "W...WW...WWWWWWWWWWW.WWW...W....W.."},
+  {"info", 5, 7, "..W........WW....W....W....W...WWW."},
 };
 }  // namespace perron

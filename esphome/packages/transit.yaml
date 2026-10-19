@@ -5,6 +5,6 @@
 # ArduinoJson mitbaut; die Abrufe selbst nutzen esp_http_client direkt (Streaming in PSRAM).
 http_request:
   verify_ssl: true
-  useragent: "perron/0.4 (+https://github.com/Nosdave/perron)"
+  useragent: "perron/0.5 (+https://github.com/Nosdave/perron)"
 
 json:

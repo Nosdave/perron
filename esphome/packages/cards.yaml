@@ -1,0 +1,73 @@
+# Karten aus Home Assistant: Vorlagen (JSON), freie Fläche (Canvas) und Bilder.
+# Spezifikation und Beispiele: docs/cards.md
+api:
+  actions:
+    # Eine Karte als JSON, z.B. {"id":"washer","t":"prog","p":2,"ti":"Waschen","val":"42'","pct":63}
+    # {"id":"washer","del":1} löscht sie. Ergebnis: Sensor "Kartenstatus".
+    - action: push_json
+      variables:
+        card: string
+      then:
+        - lambda: 'perron::card_json(card);'
+    # Bild als rohe RGB565-Pixel (little endian), base64, in Teilen von max. 8 KB Rohdaten.
+    # seq 0..total-1 nacheinander senden; key = Name des Bildes (max. 3 gleichzeitig).
+    - action: push_image
+      variables:
+        key: string
+        seq: int
+        total: int
+        width: int
+        height: int
+        data: string
+      then:
+        - lambda: 'perron::push_image_chunk(key, seq, total, width, height, data);'
+    # PNG oder BMP per Link (z.B. HA entity_picture mit Zugriffstoken); BMP wenn ".bmp" in der URL.
+    - action: push_image_url
+      variables:
+        key: string
+        url: string
+      then:
+        - lambda: 'perron::push_image_url(key, url);'
+
+online_image:
+  - id: ha_png
+    url: "http://127.0.0.1/perron.png"   # Platzhalter; HA setzt die URL zur Laufzeit
+    format: PNG
+    type: RGB565
+    resize: 192x64
+    buffer_size: 8192
+    on_download_finished:
+      - lambda: 'perron::url_image_done(0, true, id(ha_png).get_width(), id(ha_png).get_height());'
+    on_error:
+      - lambda: 'perron::url_image_done(0, false, 0, 0);'
+  - id: ha_bmp
+    url: "http://127.0.0.1/perron.bmp"
+    format: BMP
+    type: RGB565
+    resize: 192x64
+    buffer_size: 8192
+    on_download_finished:
+      - lambda: 'perron::url_image_done(1, true, id(ha_bmp).get_width(), id(ha_bmp).get_height());'
+    on_error:
+      - lambda: 'perron::url_image_done(1, false, 0, 0);'
+
+text_sensor:
+  - platform: template
+    name: "Kartenstatus"
+    icon: mdi:card-text-outline
+    entity_category: diagnostic
+    update_interval: 2s
+    lambda: |-
+      static std::string last;
+      if (perron::card_status() == last) return {};
+      last = perron::card_status();
+      return last;
+
+button:
+  - platform: template
+    id: btn_card_demo
+    name: "Karten-Demo"
+    icon: mdi:card-multiple-outline
+    entity_category: config
+    on_press:
+      - lambda: 'perron::card_demo();'

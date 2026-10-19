@@ -20,6 +20,7 @@
 #include "perron_core.h"
 #include "perron_icons.h"
 #include "perron_lines.h"
+#include "perron_cards.h"
 
 namespace perron {
 
@@ -405,7 +406,6 @@ static void build_rows(Frame &fr, const Look &L, uint32_t now) {
     if (secs < -30) return;                                     // ghost / already gone
     int mins = secs > 0 ? (int) (secs / 60) : 0;
     int walk = train ? L.walk_train_min : stop_walk(L, d.point);
-    if (walk > 0 && mins < walk - 1) return;                    // not catchable any more
     std::string dest = short_dest(d.dest, L.aliases);
     // One row per line and platform (a platform serves one direction), like STIB stop displays;
     // the destination shown is the next vehicle's (short workings, depot runs without a name).
@@ -419,6 +419,9 @@ static void build_rows(Frame &fr, const Look &L, uint32_t now) {
       cur.push_back(n);
       r = &cur.back();
     }
+    // The row exists as soon as the line is reported (rare lines keep their place even when the
+    // only vehicle is already too close to catch); uncatchable departures are not shown.
+    if (walk > 0 && mins < walk - 1) return;
     if (mins > L.horizon_min) {
       if (!r->next_epoch) r->next_epoch = when;
       return;
@@ -498,6 +501,8 @@ static void build_pager(Frame &fr, const Look &L, const Fonts &F, uint32_t now) 
     if (a.source == 0 && (!a.expires || !now || a.expires > now)) v.push_back({TAG_DISR, a.text, 1, "d:" + a.text, 0});
   for (auto &c : m.cards)
     if (!c.expires || !now || c.expires > now) v.push_back({c.tag, c.text, c.prio, "c:" + c.key, 0});
+  for (auto &c : ha_cards())  // JSON cards in the pager zone (p3 / z l)
+    if (card_zone(c) == 'l') v.push_back({(uint8_t) (c.tag >= K_CAL ? c.tag - K_CAL : TAG_HA), card_line(c), c.p, "j:" + c.id, 0});
   bool wx_ok = m.wx.valid && !stale_src(m, SRC_WX, now, 3 * 3600);
   if (wx_ok && m.wx.warning_level == 1) v.push_back({TAG_WX, std::string(s.kmi) + ": " + m.wx.warning, 2, "w:warn", 0});
   if (wx_ok && m.wx.rain_start) {
@@ -964,6 +969,10 @@ inline bool in_night(const Look &L, const esphome::ESPTime &t) {
   return mod >= L.night_from || mod < L.night_to;  // spans midnight
 }
 
+}  // namespace perron
+#include "perron_cards_draw.h"
+namespace perron {
+
 // ------------------------------------------------------------------ main entry
 static void render(Display &it, const Fonts &F, const Look &L, const esphome::ESPTime &t) {
   uint32_t now = now_epoch();
@@ -988,8 +997,23 @@ static void render(Display &it, const Fonts &F, const Look &L, const esphome::ES
     p0_last.clear();
   }
 
-  if (in_night(L, t)) {
+  // Home Assistant cards (JSON templates / canvas / images)
+  static uint32_t last_exp_s = 0;
+  if (ms / 1000 != last_exp_s) { last_exp_s = ms / 1000; expire_cards(now); }
+  const bool night = in_night(L, t);
+  CardView cv = pick_cards(fr, ms, night);
+  if (cv.full) {
+    if (!(cv.full->t == T_IMG && cv.full->fb)) status_bar(it, F, fr.m, L, t, false, now);
+    card_full(it, F, *cv.full, ms);
+    return;
+  }
+  if (night) {
     night_screen(it, F, fr, L, t);
+    return;
+  }
+  if (cv.panel) {
+    panel_departures(it, F, fr, L, t);
+    card_panel(it, F, *cv.panel, ms);
     return;
   }
 
