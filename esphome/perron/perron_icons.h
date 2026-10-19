@@ -36,6 +36,9 @@ static const Icon ICONS16[] = {
   {"car", 16, 16, "....................................WWWWWWWW.......W...W....W.....W....W.....W...W.....W......W.WWWWWWWWWWWWWWWWW..............WW.WW........WW.WW..............WWWWWWWWWWWWWWWWW..WWW......WWW....WWW......WWW.................................................."},
   {"battery", 16, 16, "................................................WWWWWWWWWWWWWW..W............W..W.WWWWWWWWW..WWWW.WWWWWWWWW..WWWW.WWWWWWWWW..WWWW.WWWWWWWWW..WWWW.WWWWWWWWW..WWWW............W..WWWWWWWWWWWWWW.................................................................."},
   {"smoke", 16, 16, "....WW....WW.......W..W..W..W.......WW....WW..........WW.............W..W.............WW........................WWWWWWWWWWWWWWWWW..............WW..WWWW..WWWW..WW..............W.WWWWWWWWWWWWWW................................................................."},
+  {"cal", 16, 16, "...W.......W....WWWWWWWWWWWWWWWWW..............WWWWWWWWWWWWWWWWWW..............WW.WW..WW..WW...WW.WW..WW..WW...WW..............WW.WW..WW..WW...WW.WW..WW..WW...WW..............WW.WW..WW.......WW.WW..WW.......WW..............WWWWWWWWWWWWWWWWW................"},
+  {"clock", 16, 16, ".....WWWWWW........WW......WW.....W..........W...W.....W......W..W.....W......W.W......W.......WW......W.......WW......WWWW....WW..............WW..............W.W............W..W............W...W..........W.....WW......WW........WWWWWW....................."},
+  {"home", 16, 16, ".......WW.............W..W...........W....W.........W......W.......W........W.....W..........W...W............W.WWWWWWWWWWWWWWWW.W............W..W..WWW...WWW.W..W..W.W...W.W.W..W..W.W...WWW.W..W..W.W.......W..W..W.W.......W..WWWWWWWWWWWWWW................."},
 };
 static const Icon ICONS9[] = {
   {"sunny", 9, 9, "....Y.....Y.....Y....OOO.....OYYYO..YYOYYYOYY..OYYYO.....OOO....Y.....Y.....Y...."},
@@ -64,5 +67,19 @@ static const Icon ICONS7[] = {
   {"plug", 5, 7, "W...WW...WWWWWWWWWWW.WWW...W....W.."},
   {"plane", 5, 7, "..W....W...WWW.WWWWW..W....W...WWW."},
   {"info", 5, 7, "..W........WW....W....W....W...WWW."},
+  {"cal", 7, 7, ".W...W.WWWWWWWW.....WW.W.W.WW.....WW.W.W.WWWWWWWW"},
+  {"clock", 7, 7, "..WWW...W...W.W..W..WW..WW.WW.....W.W...W...WWW.."},
+  {"home", 7, 7, "...W.....W.W...W...W.WWWWWWW.W...W..W.W.W..W.W.W."},
+  {"window", 7, 7, "WWWWWWWW..W..WW..W..WWWWWWWWW..W..WW..W..WWWWWWWW"},
+  {"fridge", 7, 7, ".WWWWW..W...W..WW..W..WWWWW..W...W..WW..W..WWWWW."},
+  {"snow", 7, 7, "W..W..W.W.W.W...WWW..WWWWWWW..WWW...W.W.W.W..W..W"},
+  {"bolt", 7, 7, "...WW....WW....WW....WWWWWW....WW....WW....WW...."},
+  {"cake", 7, 7, "..W.W....W.W...WWWWW..W...W.WWWWWWWW.....WWWWWWWW"},
+  {"school", 7, 7, "...W.....WWW...WWWWW.WWWWWWW.W.W.W..W.W.W.WWWWWWW"},
+  {"pin", 7, 7, "..WWW...W...W..W.W.W..W...W...W.W....W.W.....W..."},
+  {"tram", 7, 7, "..WWW...WWWWW..W...W..WWWWW..WWWWW..W.W.W.W.....W"},
+  {"bus", 7, 7, ".WWWWW.W.....WW.....WWWWWWWWW.WWW.WWWWWWWW.W...W."},
+  {"train", 7, 7, "..WWW...W...W..WWWWW..WWWWW..W.W.W..WWWWW.W.....W"},
+  {"euro", 7, 7, "..WWWW..W.....WWWWW...W.....WWWW....W.......WWWW."},
 };
 }  // namespace perron

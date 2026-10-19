@@ -59,12 +59,16 @@ reason a card was rejected. The **Karten-Demo** button cycles through example ca
 | `ring` | doorbell / visitor | `ic` `ti` `sub` `img` |
 | `img` | image | `img` (slot name), `ti`, `ft`, `fb:1` = full bleed 192×64 (max 10 s) |
 | `cv` | free canvas | `el` (see below) |
+| `agenda` | today's appointments, time column, pages of 3 (full) / 5 (panel) | `ic` `ti` `rows: [[icon, text, time, colour], …]` (up to 8) |
 
 Colours are tokens, never hex: `w` warm white, `s` grey, `a` amber, `r` red, `rc` red chip,
 `nv` SNCB navy, `w:2` / `w:4` dimmed, or a `tag` name.
 Fonts: `tiny` `small` `mid` `dest` `big` `clock`.
-Icons: 16 px `bell` `person` `washer` `car` `battery` `smoke` and the weather conditions;
-7 px `bell` `washer` `car` `battery` `door` `sun` `plug` `info` `walk` `warn`.
+Icons: 16 px `bell` `person` `washer` `car` `battery` `smoke` `cal` `clock` `home` and the weather
+conditions; 7 px `bell` `washer` `car` `battery` `door` `sun` `plug` `info` `walk` `warn` `plane`
+`cal` `clock` `home` `window` `fridge` `snow` `bolt` `cake` `school` `pin` `tram` `bus` `train` `euro`.
+`ic` next to `ti` is shown in every template that has a title. Unknown icon names are reported in
+**Kartenstatus** ("Icon unbekannt: …").
 
 ### Canvas (`t:"cv"`)
 
