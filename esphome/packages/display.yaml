@@ -25,10 +25,12 @@ font:
     ignore_missing_glyphs: true
   - file: "fonts/9x15B.bdf"
     id: f_big
-    glyphs: " +-0123456789:'°X"
+    glyphsets: [GF_Latin_Core]   # Ziffern, . , % / und Buchstaben (HA-Karten: "3.4", "78%", "1:05")
+    ignore_missing_glyphs: true
   - file: "fonts/10x20.bdf"
     id: f_clock
-    glyphs: " +-0123456789:'°X"
+    glyphsets: [GF_Latin_Core]   # Ziffern, . , % / und Buchstaben (HA-Karten: "3.4", "78%", "1:05")
+    ignore_missing_glyphs: true
 
 qr_code:
   # Setup: verbindet das Handy mit dem Hotspot (danach öffnet sich das Captive-Portal).

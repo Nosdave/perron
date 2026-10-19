@@ -13,6 +13,7 @@
     station: T("Bahnhof"), tfilter: T("Zugfilter"), cfrom: T("Pendeln von"), cto: T("Pendeln nach"),
     loc: T("Standort"), dfilter: T("Zielfilter"), alias: T("Kurznamen"), night: T("Nachtzeit"), free: T("Freitext"),
     layout: SEL("Layout"), lang: SEL("Sprache"), nmode: SEL("Nachtmodus"),
+    badges: SEL("Helle Linien"), scroll: SEL("Laufschrift"),
     bright: N("Helligkeit"), nbright: N("Helligkeit Nacht"), glass: N("Frontscheibe Lichtdurchlass"), walk: N("Gehzeit zur Haltestelle"), wtrain: N("Gehzeit zum Bahnhof"),
     horizon: N("Vorschau"), dwell: N("Infozeile Wechsel"),
     wx: SW("Wetter (KMI)"), bea: SW("BE-Alert"), disr: SW("STIB-Störungen"), news: SW("Schlagzeilen"),
@@ -158,7 +159,7 @@
       field("Freitext", "free", { ph: "z. B. Willkommen!" }),
     ] },
     { t: "Darstellung", b: () => [
-      choice("Layout", "layout"), choice("Sprache", "lang"),
+      choice("Layout", "layout"), choice("Helle Linien", "badges"), choice("Laufschrift", "scroll"), choice("Sprache", "lang"),
       toggle("Automatische Helligkeit", "autob", "Mit Lichtsensor (VEML7700): regelt zwischen Nacht- und Tageshelligkeit."),
       range("Helligkeit (maximal)", "bright", 5, 255, 5, ""),
       range("Frontscheibe Lichtdurchlass (Lichtsensor-Korrektur)", "glass", 5, 100, 1, " %"),
