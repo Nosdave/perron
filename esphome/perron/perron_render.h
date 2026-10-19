@@ -844,16 +844,19 @@ static void dest_txt(Display &it, const Fonts &F, Font *f, int x, int y, const R
   std::string plan = (r.train && r.plan_epoch) ? hhmm(r.plan_epoch) : std::string();
   bool air = r.train && airport_dest(r.dest);
   int ch = cap_h(f, F);
-  if (r.train && look().sncb_logo && maxw > 30) {  // SNCB "B" oval, white on SNCB blue (9x9)
-    static const char *const B9[9] = {"..#####..", ".#.....#.", "#..###..#", "#..#..#.#", "#..###..#",
-                                      "#..#..#.#", "#..###..#", ".#.....#.", "..#####.."};
+  if (r.train && look().sncb_logo && maxw > 30) {  // SNCB "B" in a blue oval (12x9), white B
+    static const char *const OV[9] = {"..########..", ".##########.", "############", "############", "############",
+                                      "############", "############", ".##########.", "..########.."};
+    static const char *const BB[7] = {"###.", "#..#", "#..#", "###.", "#..#", "#..#", "###."};
     int ly = y + ch / 2 - 4;
-    it.filled_rectangle(x, ly, 9, 9, Color(0x01, 0x6A, 0xB3));
     for (int j = 0; j < 9; j++)
-      for (int i = 0; i < 9; i++)
-        if (B9[j][i] == '#') it.draw_pixel_at(x + i, ly + j, Color(255, 255, 255));
-    x += 12;
-    maxw -= 12;
+      for (int i = 0; i < 12; i++)
+        if (OV[j][i] == '#') it.draw_pixel_at(x + i, ly + j, Color(0x01, 0x6A, 0xB3));
+    for (int j = 0; j < 7; j++)
+      for (int i = 0; i < 4; i++)
+        if (BB[j][i] == '#') it.draw_pixel_at(x + 4 + i, ly + 1 + j, Color(255, 255, 255));
+    x += 15;
+    maxw -= 15;
   }
   Font *pf = f == F.tiny ? F.tiny : F.small;
   int aw = air ? 8 : 0;
