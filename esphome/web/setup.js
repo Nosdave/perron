@@ -11,7 +11,7 @@
   const E = {
     key: T("STIB API-Schlüssel"), points: T("Haltestellen"), lines: T("Linienfilter"),
     station: T("Bahnhof"), tfilter: T("Zugfilter"), cfrom: T("Pendeln von"), cto: T("Pendeln nach"),
-    loc: T("Standort"), dfilter: T("Zielfilter"), alias: T("Kurznamen"), night: T("Nachtzeit"), free: T("Freitext"),
+    loc: T("Standort"), nsrc: T("Nachrichtenquellen"), dfilter: T("Zielfilter"), alias: T("Kurznamen"), night: T("Nachtzeit"), free: T("Freitext"),
     layout: SEL("Layout"), lang: SEL("Sprache"), nmode: SEL("Nachtmodus"),
     badges: SEL("Helle Linien"), scroll: SEL("Laufschrift"),
     bright: N("Helligkeit"), nbright: N("Helligkeit Nacht"), glass: N("Frontscheibe Lichtdurchlass"), walk: N("Gehzeit zur Haltestelle"), wtrain: N("Gehzeit zum Bahnhof"),
@@ -50,6 +50,35 @@
       state[k] = e[0] === "switch" ? j.value === true || j.state === "ON" : (j.value ?? j.state ?? "");
       if (e[0] === "select") state[k + "_opts"] = j.option || [];
     }));
+  }
+
+  // ---- news sources (codes must match NEWS_SOURCES in perron_core.h) ----
+  const NEWS = [
+    ["Belgien", [["bt", "Brussels Times · Belgien (EN)"], ["bul", "The Bulletin (EN)"], ["vrt", "VRT NWS (NL)"], ["llb", "La Libre (FR)"]]],
+    ["Brüssel", [["btb", "Brussels Times · Brüssel (EN)"], ["bx1", "BX1 · Bruxelles (FR)"]]],
+    ["Europa / EU", [["bteu", "Brussels Times · EU (EN)"], ["pol", "Politico Europe (EN)"], ["en", "Euronews (EN)"], ["enb", "Euronews · Wirtschaft (EN)"]]],
+    ["Welt", [["btw", "Brussels Times · Welt (EN)"], ["bbc", "BBC World (EN)"]]],
+    ["Deutschsprachig", [["ts", "tagesschau · Inland (DE)"], ["tsa", "tagesschau · Ausland (DE)"], ["orf", "ORF (AT)"]]],
+  ];
+  function newsSources() {
+    const box = h("div", { class: "srcs" }, h("span", { class: "hint" }, "Quellen (max. 3) – je 3 Schlagzeilen, abwechselnd:"));
+    const cur = () => (state.nsrc || "bt").split(",").map((x) => x.trim()).filter(Boolean);
+    for (const [grp, items] of NEWS) {
+      box.append(h("div", { class: "grp" }, grp));
+      for (const [code, label] of items) {
+        const cb = h("input", { type: "checkbox", checked: cur().includes(code) });
+        cb.addEventListener("change", async () => {
+          let v = cur().filter((c) => c !== code);
+          if (cb.checked) v.push(code);
+          if (v.length > 3) { cb.checked = false; toast("Maximal 3 Quellen"); return; }
+          state.nsrc = v.join(",");
+          await set(E.nsrc, state.nsrc);
+          saved(cb.parentElement);
+        });
+        box.append(h("label", { class: "t" }, cb, h("span", {}, label)));
+      }
+    }
+    return box;
   }
 
   // ---- field factories (save on change, show a tick) ----
@@ -154,7 +183,7 @@
       toggle("BE-Alert Warnungen für deinen Standort", "bea"),
       h("button", { class: "ghost", onclick: async () => { await post(`/button/${enc("Warnung testen")}/press`); toast("Testwarnung läuft (60 s)"); } }, "Warnanzeige testen"),
       toggle("STIB-Störungen deiner Linien", "disr"),
-      toggle("Schlagzeilen (Brussels Times)", "news"),
+      toggle("Schlagzeilen", "news"), newsSources(),
       toggle("Freitext anzeigen", "freeon", "Wird von Home Assistant oder hier gesetzt."),
       field("Freitext", "free", { ph: "z. B. Willkommen!" }),
     ] },

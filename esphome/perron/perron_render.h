@@ -520,6 +520,12 @@ static void build_pager(Frame &fr, const Look &L, const Fonts &F, uint32_t now) 
     if (!c.expires || !now || c.expires > now) v.push_back({c.tag, c.text, c.prio, "c:" + c.key, 0});
   for (auto &c : ha_cards())  // JSON cards in the pager zone (p3 / z l)
     if (card_zone(c) == 'l') v.push_back({(uint8_t) (c.tag >= K_CAL ? c.tag - K_CAL : TAG_HA), card_line(c), c.p, "j:" + c.id, 0});
+    else if (c.t == T_AGENDA && !c.rows.empty()) {  // the agenda also runs in the info line
+      std::string a = c.ti.empty() ? std::string() : c.ti + ": ";
+      for (size_t i = 0; i < c.rows.size(); i++)
+        a += (i ? " · " : "") + (c.rows[i].val.empty() ? c.rows[i].label : c.rows[i].val + " " + c.rows[i].label);
+      v.push_back({TAG_CAL, a, 2, "ja:" + c.id, 0});
+    }
   bool wx_ok = m.wx.valid && !stale_src(m, SRC_WX, now, 3 * 3600);
   if (wx_ok && m.wx.warning_level == 1) v.push_back({TAG_WX, std::string(s.kmi) + ": " + m.wx.warning, 2, "w:warn", 0});
   if (wx_ok && m.wx.rain_start) {
@@ -557,7 +563,7 @@ static void build_pager(Frame &fr, const Look &L, const Fonts &F, uint32_t now) 
   if (L.free_on && !L.free_text.empty()) v.push_back({TAG_HA, led_safe(L.free_text), 3, "free", 0});
   // headlines: at most 2 per cycle, rotating, so they never crowd out personal items
   if (!m.news.empty()) {
-    size_t base = (now / 600) % m.news.size();
+    size_t base = (now / 300) % m.news.size();
     for (size_t i = 0; i < std::min<size_t>(2, m.news.size()); i++) {
       const std::string &n = m.news[(base + i) % m.news.size()];
       v.push_back({TAG_NEWS, n, 3, "n:" + n, 0});

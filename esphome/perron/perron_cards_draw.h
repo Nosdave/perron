@@ -61,26 +61,35 @@ static bool numeric(const std::string &v) {
   return true;
 }
 
-static void draw_slot(Display &it, const std::string &key, int x, int y, int maxw, int maxh) {
+// Draws an image slot into the area x,y,W,H (nearest neighbour).
+// fit 'c' (cover): fills the area, crops the overflow; fy = vertical crop position 0..100.
+// fit 'l' (letterbox): whole image, centred, black bars.
+static void draw_slot(Display &it, const std::string &key, int x, int y, int W, int H, char fit = 'c', int fy = 50) {
   ImgSlot *s = slot(key, false);
-  if (!s || !s->ready) return;
-  it.start_clipping(esphome::display::Rect(x, y, maxw, maxh));
-  if (s->url) {
-    if (url_drawer()) url_drawer()(&it, s->url_fmt, x, y);
-  } else if (s->px) {
-    int w = std::min<int>(s->w, maxw), h = std::min<int>(s->h, maxh);
-    for (int j = 0; j < h; j++) {
-      const uint16_t *row = s->px + j * s->w;
-      for (int i = 0; i < w; i++) {
-        uint16_t c = row[i];
-        if (!c) continue;
-        uint8_t r = (c >> 11) & 0x1F, g = (c >> 5) & 0x3F, b = c & 0x1F;
-        it.draw_pixel_at(x + i, y + j, Color((r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2)));
-      }
+  if (!s || !s->ready || !s->px || W <= 0 || H <= 0) return;
+  // scale as 16.16 fixed point: dest px per source px
+  uint32_t kx = (uint32_t(W) << 16) / s->w, ky = (uint32_t(H) << 16) / s->h;
+  uint32_t k = fit == 'l' ? std::min(kx, ky) : std::max(kx, ky);
+  if (!k) return;
+  int dw = (int) ((uint64_t) s->w * k >> 16), dh = (int) ((uint64_t) s->h * k >> 16);
+  int ox = (W - dw) / 2;
+  int oy = fit == 'l' ? (H - dh) / 2 : -((dh - H) * fy / 100);
+  for (int j = 0; j < H; j++) {
+    int sy = (int) ((((int64_t) (j - oy)) << 16) / k);
+    if (j < oy || sy < 0 || sy >= s->h) continue;
+    const uint16_t *row = s->px + sy * s->w;
+    for (int i = 0; i < W; i++) {
+      if (i < ox) continue;
+      int sx = (int) ((((int64_t) (i - ox)) << 16) / k);
+      if (sx < 0 || sx >= s->w) continue;
+      uint16_t c = row[sx];
+      if (!c) continue;
+      uint8_t r = (c >> 11) & 0x1F, g = (c >> 5) & 0x3F, b = c & 0x1F;
+      it.draw_pixel_at(x + i, y + j, Color((r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2)));
     }
   }
-  it.end_clipping();
 }
+static char fit_of(const HaCard &c, char def) { return c.fit ? c.fit : def; }
 // Fit text into w px: whole words if possible, else cut by characters (never drop everything).
 static std::string fit_cut(Font *f, const std::string &s, int w) {
   std::string t = fit_words(f, s, w);
@@ -126,7 +135,7 @@ static void canvas(Display &it, const Fonts &F, const HaCard &c) {
         it.filled_rectangle(e.x, e.y, e.w, e.h, C_W4);
         it.filled_rectangle(e.x, e.y, e.w * e.pct / 100, e.h, col);
         break;
-      case 'm': draw_slot(it, e.s, e.x, e.y, 192 - e.x, 64 - e.y); break;
+      case 'm': draw_slot(it, e.s, e.x, e.y, (c.z == 'p' ? 191 : 191) - e.x, 56 - e.y, fit_of(c, 'l'), c.fy); break;
     }
   }
 }
@@ -225,7 +234,7 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
     }
     case T_RING: {
       Color tc = c.s == 'i' ? C_CATCH : hc;
-      if (!c.img.empty() && slot_ready(c.img)) draw_slot(it, c.img, 1, 11, 60, 45);
+      if (!c.img.empty() && slot_ready(c.img)) draw_slot(it, c.img, 1, 11, 60, 44, fit_of(c, 'l'), c.fy);
       else icon(it, 22, 25, c.ic.empty() ? "bell" : c.ic.c_str(), 16, &tc);
       txt(it, F, F.dest, 66, 13, fit_words(F.dest, c.ti, 124), tc);
       txt(it, F, F.mid, 66, 31, fit_words(F.mid, c.sub, 124), C_WARM);
@@ -233,8 +242,8 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
       break;
     }
     case T_IMG:
-      if (c.fb) { draw_slot(it, c.img, 0, 0, 192, 64); return; }
-      draw_slot(it, c.img, 0, 11, 192, 44);  // keep y55+ free for the info line
+      if (c.fb) { draw_slot(it, c.img, 0, 0, 192, 64, fit_of(c, 'c'), c.fy); return; }
+      draw_slot(it, c.img, 0, 11, 192, 44, fit_of(c, 'c'), c.fy);  // keep y55+ free for the info line
       if (!c.ti.empty()) txt(it, F, F.small, 4, 13, c.ti, C_WARM);
       break;
     case T_AGENDA: {
@@ -355,16 +364,16 @@ static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms
       break;
     case T_RING: {
       Color tc = c.s == 'i' ? C_CATCH : hc;
-      if (!c.img.empty() && slot_ready(c.img)) draw_slot(it, c.img, 128, 0, 64, 44);
+      if (!c.img.empty() && slot_ready(c.img)) draw_slot(it, c.img, 128, 0, 64, 44, fit_of(c, 'l'), c.fy);
       else icon(it, 152, 10, c.ic.empty() ? "bell" : c.ic.c_str(), 16, &tc);
       txt(it, F, F.small, 160, 46, fit_words(F.small, c.ti, 60), tc, 1);
       if (c.at) txt(it, F, F.tiny, 160, 56, hhmm(c.at), C_SEC, 1);
       break;
     }
     case T_IMG:
-      if (c.ft.empty()) draw_slot(it, c.img, 128, 0, 64, 64);
+      if (c.ft.empty()) draw_slot(it, c.img, 128, 0, 64, 55, fit_of(c, 'c'), c.fy);
       else {
-        draw_slot(it, c.img, 128, 0, 64, 55);
+        draw_slot(it, c.img, 128, 0, 64, 55, fit_of(c, 'c'), c.fy);
         txt(it, F, F.tiny, 130, 57, fit_words(F.tiny, c.ft, 60), C_SEC);
       }
       break;
@@ -423,6 +432,14 @@ static void panel_departures(Display &it, const Fonts &F, const Frame &fr, const
 // Panel: p2 / z p / p1 after hold; several alternate every 10 s.
 struct CardView { const HaCard *full = nullptr, *panel = nullptr; };
 
+// "every"/"show": a card that stays up to date in the background but appears only now and then.
+// The phase is offset per card id so several occasional cards do not appear together.
+static bool occasional_on(const HaCard &c, uint32_t ms) {
+  if (!c.every) return true;
+  uint32_t s = ms / 1000 + (fnv(c.id) % c.every);
+  return s % c.every < c.show;
+}
+
 static CardView pick_cards(const Frame &fr, uint32_t ms, bool night) {
   CardView v;
   auto &cards = ha_cards();
@@ -447,8 +464,11 @@ static CardView pick_cards(const Frame &fr, uint32_t ms, bool night) {
   if (!v.full && !leave_now && !night) {
     std::vector<const HaCard *> rot;
     for (auto &c : cards)
-      if (card_zone(c) == 'f' && !(c.p == 1 && ms - c.since_ms < c.hold * 1000u)) rot.push_back(&c);
-    if (!rot.empty() && (ms / 1000) % 45 < 8 && ms - last_full_end > 30000) {
+      if (card_zone(c) == 'f' && !(c.p == 1 && ms - c.since_ms < c.hold * 1000u)) {
+        if (c.every) { if (occasional_on(c, ms) && !v.full) v.full = &c; }  // own schedule
+        else rot.push_back(&c);
+      }
+    if (!v.full && !rot.empty() && (ms / 1000) % 45 < 8 && ms - last_full_end > 30000) {
       v.full = rot[(ms / 45000) % rot.size()];
     }
   }
@@ -460,6 +480,7 @@ static CardView pick_cards(const Frame &fr, uint32_t ms, bool night) {
   for (auto &c : cards) {
     char z = card_zone(c);
     if (&c == v.full) continue;
+    if (!occasional_on(c, ms)) continue;
     if (z == 'p' || (z == 'e' && c.p == 1) || (leave_now && (z == 'e' || z == 'f') && c.t != T_IMG)) pan.push_back(&c);
   }
   if (!pan.empty()) v.panel = pan[(ms / 10000) % pan.size()];

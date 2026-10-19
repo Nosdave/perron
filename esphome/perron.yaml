@@ -38,10 +38,6 @@ esphome:
             img->set_url(url);
             img->update();
           };
-          perron::url_drawer() = [](void *d, uint8_t fmt, int x, int y) {
-            auto *disp = static_cast<esphome::display::Display *>(d);
-            disp->image(x, y, fmt == 2 ? id(ha_jpg) : fmt ? id(ha_bmp) : id(ha_png));
-          };
   includes:
     - perron/perron_core.h
     - perron/perron_icons.h

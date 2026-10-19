@@ -150,6 +150,18 @@ text:
     initial_value: "23:00-06:00"
     max_length: 16
     entity_category: config
+  # Schlagzeilen-Quellen (max. 3), Kürzel siehe Einstellungsseite / docs: bt btb bteu btw bx1 bul vrt
+  # llb en enb pol bbc ts tsa orf
+  - platform: template
+    id: cfg_news_src
+    name: "Nachrichtenquellen"
+    icon: mdi:newspaper-variant-multiple
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: "bt"
+    max_length: 40
+    entity_category: config
   - platform: template
     id: cfg_free_text
     name: "Freitext"
@@ -393,6 +405,7 @@ interval:
           c.bealert_on = id(sw_bealert).state;
           c.disruptions_on = id(sw_disruptions).state;
           c.news_on = id(sw_news).state;
+          c.news_src = id(cfg_news_src).state;
           perron::set_config(c);
 
           perron::Look &L = perron::look();

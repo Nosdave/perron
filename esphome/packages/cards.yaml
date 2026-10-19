@@ -35,10 +35,14 @@ online_image:
     url: "http://127.0.0.1/perron.png"   # Platzhalter; HA setzt die URL zur Laufzeit
     format: PNG
     type: RGB565
-    resize: 192x64
+    resize: 192x192
     buffer_size: 8192
     on_download_finished:
-      - lambda: 'perron::url_image_done(0, true, id(ha_png).get_width(), id(ha_png).get_height());'
+      - lambda: |-
+          auto *img = id(ha_png);
+          perron::url_image_store(0, img->get_width(), img->get_height(),
+                                  [img](int x, int y) { return img->get_pixel(x, y); });
+          img->release();
     on_error:
       - lambda: 'perron::url_image_done(0, false, 0, 0);'
   # JPEG: Kamerabilder aus HA (camera_proxy). Tipp: &width=192 an die URL hängen, dann skaliert
@@ -47,20 +51,28 @@ online_image:
     url: "http://127.0.0.1/perron.jpg"
     format: JPEG
     type: RGB565
-    resize: 192x64
+    resize: 192x192
     buffer_size: 8192
     on_download_finished:
-      - lambda: 'perron::url_image_done(2, true, id(ha_jpg).get_width(), id(ha_jpg).get_height());'
+      - lambda: |-
+          auto *img = id(ha_jpg);
+          perron::url_image_store(2, img->get_width(), img->get_height(),
+                                  [img](int x, int y) { return img->get_pixel(x, y); });
+          img->release();
     on_error:
       - lambda: 'perron::url_image_done(2, false, 0, 0);'
   - id: ha_bmp
     url: "http://127.0.0.1/perron.bmp"
     format: BMP
     type: RGB565
-    resize: 192x64
+    resize: 192x192
     buffer_size: 8192
     on_download_finished:
-      - lambda: 'perron::url_image_done(1, true, id(ha_bmp).get_width(), id(ha_bmp).get_height());'
+      - lambda: |-
+          auto *img = id(ha_bmp);
+          perron::url_image_store(1, img->get_width(), img->get_height(),
+                                  [img](int x, int y) { return img->get_pixel(x, y); });
+          img->release();
     on_error:
       - lambda: 'perron::url_image_done(1, false, 0, 0);'
 
