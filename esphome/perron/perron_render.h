@@ -561,10 +561,10 @@ static void build_pager(Frame &fr, const Look &L, const Fonts &F, uint32_t now) 
     v.push_back({TAG_COMMUTE, b, 2, "pt", 0});
   }
   if (L.free_on && !L.free_text.empty()) v.push_back({TAG_HA, led_safe(L.free_text), 3, "free", 0});
-  // headlines: at most 2 per cycle, rotating, so they never crowd out personal items
+  // headlines: 3 per cycle (one per selected source, they are interleaved), rotating
   if (!m.news.empty()) {
     size_t base = (now / 300) % m.news.size();
-    for (size_t i = 0; i < std::min<size_t>(2, m.news.size()); i++) {
+    for (size_t i = 0; i < std::min<size_t>(3, m.news.size()); i++) {
       const std::string &n = m.news[(base + i) % m.news.size()];
       v.push_back({TAG_NEWS, n, 3, "n:" + n, 0});
     }
@@ -851,7 +851,8 @@ static void dest_txt(Display &it, const Fonts &F, Font *f, int x, int y, const R
   txt(it, F, f, x, y, d, c);
   int xe = x + text_w(f, d);
   int ch = cap_h(f, F);
-  if (air) { icon(it, xe + 3, y + ch - 7, "plane", 7, &c); xe += aw; }
+  static const Color C_PLANE(0x41, 0x9B, 0xF5);  // airport pictogram in blue
+  if (air) { icon(it, xe + 3, y + ch - 7, "plane", 7, &C_PLANE); xe += aw; }
   if (pw) txt(it, F, pf, xe + 4, y + ch - cap_h(pf, F), plan, C_SEC);
 }
 
