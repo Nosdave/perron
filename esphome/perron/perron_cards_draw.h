@@ -328,7 +328,7 @@ static void panel_departures(Display &it, const Fonts &F, const Frame &fr, const
     badge(it, F, 1, y, r.line, 22, 11);
     int mr;
     if (r.mins.empty()) {
-      std::string tt = r.next_epoch ? hhmm(r.next_epoch) : std::string("-");
+      std::string tt = empty_text(r);
       txt(it, F, F.mid, 126, y + 2, tt, C_SEC, 2);
       mr = 126 - text_w(F.mid, tt);
     } else {
@@ -342,13 +342,12 @@ static void panel_departures(Display &it, const Fonts &F, const Frame &fr, const
         txt(it, F, F.small, 120, y, "'", c);
         mr = 119 - text_w(F.big, ms);
       }
-      if (r.train && r.delay_min > 0) mr -= delay_chip(it, F, mr - 2, y + 2, r.delay_min) + 2;
+      if (r.train && r.delay_min > 0) mr -= delay_chip(it, F, mr - 2, y + 3, r.delay_min) + 2;
     }
     int dw = mr - 27 - 4;
-    Color dc = (r.canceled || r.mins.empty()) ? C_SEC : C_WARM;
-    std::string d = fit_words(F.mid, r.dest, dw);
-    if (!d.empty()) txt(it, F, F.mid, 27, y + 2, d, dc);
-    else txt(it, F, F.tiny, 27, y + 3, fit_words(F.tiny, r.dest, dw), dc);
+    Color dc = r.canceled ? C_SEC : C_WARM;
+    if (!fit_words(F.mid, r.dest, dw).empty()) dest_txt(it, F, F.mid, 27, y + 2, r, dw, dc);
+    else dest_txt(it, F, F.tiny, 27, y + 3, r, dw, dc);
   }
 }
 

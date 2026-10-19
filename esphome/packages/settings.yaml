@@ -179,6 +179,16 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
+  # Linien mit dunkler Schrift (z. B. 60, S5): voll gefüllt wie im Original oder nur Kontur
+  - platform: template
+    id: cfg_badge_style
+    name: "Helle Linien"
+    icon: mdi:format-color-fill
+    options: ["Gefüllt (wie Original)", "Nur Kontur"]
+    initial_option: "Gefüllt (wie Original)"
+    optimistic: true
+    restore_value: true
+    entity_category: config
   - platform: template
     id: cfg_lang
     name: "Sprache"
@@ -378,6 +388,8 @@ interval:
           perron::Look &L = perron::look();
           auto lay = id(cfg_layout).active_index();
           L.layout = (perron::Layout) (lay.has_value() ? *lay : 0);
+          auto bs = id(cfg_badge_style).active_index();
+          L.badge_fill = !bs.has_value() || *bs == 0;
           L.ui_lang = LANGS[li.has_value() ? *li : 0];
           auto nm = id(cfg_night_mode).active_index();
           L.night = (perron::NightMode) (nm.has_value() ? *nm : 1);
