@@ -30,6 +30,7 @@ reason a card was rejected. The **Karten-Demo** button cycles through example ca
 | `z` | zone: `f` full screen, `p` panel, `l` pager, `a` automatic (default) |
 | `s` | severity: `i` info, `a` attention (amber), `x` alarm (red title + rule) |
 | `tag` | topic colour: `cal` `com` `wx` `dis` `alr` `news` `ha` (default) |
+| `ac` | accent colour of icon, title, unit and bar: `y` yellow, `g` green, `b` blue, `v` violet (default: the tag colour) |
 | `ttl` | seconds until the card disappears (0 = until removed) |
 | `hold` | seconds on the full screen for a `p:1` event (3–30, default 15) |
 | `ic` `ti` `val` `u` `sub` `ft` `pct` | icon, title, value, unit, secondary text, footer, percent |
@@ -43,6 +44,7 @@ reason a card was rejected. The **Karten-Demo** button cycles through example ca
   At night only `ring` cards go full screen.
 - `p:2` – panel; several panel cards alternate every 10 s. With `z:"f"`: 8 s every 45 s on the full screen.
 - `p:3` – one line in the pager.
+- The info line (pager) keeps running under full-screen and panel cards.
 - While a departure shows red minutes (leave now), no card takes the full screen.
 
 ### Templates
@@ -53,7 +55,7 @@ reason a card was rejected. The **Karten-Demo** button cycles through example ca
 | `prog` | progress (washer, charging) | `ic` `ti` `val` `pct` `sub` |
 | `list` | 2–4 rows | `rows: [[icon, label, value, colour], …]` |
 | `msg` | text message, paged | `ti` `sub` (up to 200 characters) |
-| `kpi` | 2–3 numbers side by side | `kpi: [[label, value, unit, colour, pct, sub], …]` |
+| `kpi` | 2–3 numbers side by side | `kpi: [[label, value, unit, colour, pct, sub, icon], …]` – colour `w` = card accent, or `y`/`g`/`b`/`v` per cell |
 | `ring` | doorbell / visitor | `ic` `ti` `sub` `img` |
 | `img` | image | `img` (slot name), `ti`, `ft`, `fb:1` = full bleed 192×64 (max 10 s) |
 | `cv` | free canvas | `el` (see below) |

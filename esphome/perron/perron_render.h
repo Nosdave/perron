@@ -730,7 +730,8 @@ static void status_bar(Display &it, const Fonts &F, const Model &m, const Look &
 // Pager: remembers the shown item by key (stable when the list changes), scrolls long text once
 // L.scroll_px px per frame (20/40/60 px/s at the 50 ms render tick) after 1.5 s, then holds.
 // Frame-counted, so every step is the same size (time-based offsets gave uneven jumps = judder). Draws only the visible characters (fixed 5 px font).
-static void pager(Display &it, const Fonts &F, const std::vector<PagerItem> &items, const Look &L, int y) {
+static void pager(Display &it, const Fonts &F, const std::vector<PagerItem> &items, const Look &L, int y,
+                  int avail = 185) {
   static std::string cur_key;
   static uint32_t started = 0, frame_no = 0, start_frame = 0;
   frame_no++;
@@ -742,7 +743,6 @@ static void pager(Display &it, const Fonts &F, const std::vector<PagerItem> &ite
     if (items[i].key == cur_key) { idx = i; found = true; break; }
   if (!found) { cur_key = items[0].key; idx = 0; started = ms; start_frame = frame_no; }
   const PagerItem *p = &items[idx];
-  const int avail = 185;
   int over = p->width - avail;
   uint32_t need = L.dwell_s * 1000 + (over > 0 ? over * 50 / std::max(1, L.scroll_px) + 2000 : 0);
   if (ms - started > need) {
@@ -1044,6 +1044,7 @@ static void render(Display &it, const Fonts &F, const Look &L, const esphome::ES
   if (cv.full) {
     if (!(cv.full->t == T_IMG && cv.full->fb)) status_bar(it, F, fr.m, L, t, false, now);
     card_full(it, F, *cv.full, ms);
+    if (L.pager && !(cv.full->t == T_IMG && cv.full->fb)) pager(it, F, fr.pager, L, 55);  // news keep running
     return;
   }
   if (night) {
@@ -1053,6 +1054,7 @@ static void render(Display &it, const Fonts &F, const Look &L, const esphome::ES
   if (cv.panel) {
     panel_departures(it, F, fr, L, t);
     card_panel(it, F, *cv.panel, ms);
+    if (L.pager) pager(it, F, fr.pager, L, 55, 120);
     return;
   }
 
