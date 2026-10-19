@@ -40,6 +40,10 @@ data:
 sends car travel times (e.g. Waze Travel Time sensors), the next calendar events (recurring
 events expanded by Home Assistant) and an optional free-text entity to the board every 5 minutes.
 
+- Set **ESPHome action of the board** to your device's action (`esphome.<device_name>_push_card`).
+- Only select travel-time sensors that are actually polled; disabled polling sends frozen values.
+- Use either the blueprint or the legacy integration's board push for commute times, not both.
+
 ## Legacy integration
 
 `custom_components/diele_board` is the earlier Home Assistant integration. It is no longer needed
