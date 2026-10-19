@@ -21,7 +21,8 @@
   const enc = encodeURIComponent;
   const url = ([d, n]) => `/${d}/${enc(n)}`;
   const post = (u) => fetch(u, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } });
-  async function get(e) { try { return await (await fetch(url(e))).json(); } catch { return {}; } }
+  // detail=all: selects only list their options with it
+  async function get(e) { try { return await (await fetch(url(e) + "?detail=all")).json(); } catch { return {}; } }
   async function set(e, v) {
     const [d] = e;
     if (d === "text" || d === "number") return post(`${url(e)}/set?value=${enc(v)}`);
@@ -93,7 +94,7 @@
     await Promise.all(jobs);
     await loadAll();
     toast("Übernommen ✓");
-    go(1);
+    go(p.station && !p.points ? 1 : cur);
   }
   addEventListener("message", (ev) => {
     if (ev.origin !== HELPER_ORIGIN || !ev.data || !ev.data.perron) return;
@@ -134,6 +135,8 @@
     ] },
     { t: "Zug & Pendeln", b: () => [
       h("p", { class: "lead" }, "Optional: SNCB-Abfahrten und Fahrzeit zur Arbeit mit dem Zug (iRail)."),
+      h("button", { class: "primary", onclick: openHelper }, "📍 Bahnhof per Handy-Standort vorschlagen"),
+      h("p", { class: "hint" }, "Gleiche Hilfsseite wie bei den Haltestellen: die nächsten Bahnhöfe stehen unter „Zug (SNCB)“."),
       field("Bahnhof (iRail-ID)", "station", { ph: "BE.NMBS.0088…", hint: "Mit dem Standort-Assistenten auswählbar." }),
       field("Zugfilter", "tfilter", { ph: "z. B. p2 oder S5,S19", hint: "p2 = nur Gleis 2; Liniennamen oder Ziele, kommagetrennt." }),
       range("Gehzeit zum Bahnhof", "wtrain", 0, 30, 1, " min"),

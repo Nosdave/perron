@@ -1,4 +1,4 @@
-:root{--bg:#0e0e10;--card:#18181c;--line:#2a2a30;--fg:#ffe9cc;--sec:#9a948c;--acc:#ffa000;--ok:#4fd1c5}
+:root{color-scheme:dark;--bg:#0e0e10;--card:#18181c;--line:#2a2a30;--fg:#ffe9cc;--sec:#9a948c;--acc:#ffa000;--ok:#4fd1c5}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
 esp-app{display:none}
@@ -28,3 +28,10 @@ summary{cursor:pointer;color:var(--sec)}
 .saved{outline:2px solid var(--ok);outline-offset:2px;transition:outline-color .6s}
 pre.status{background:#0b0b0d;border:1px solid var(--line);border-radius:10px;padding:12px;white-space:pre-wrap;font-size:14px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ok);color:#042;padding:10px 16px;border-radius:999px;font-weight:600}
+
+/* Dropdowns: explicit dark options + visible chevron (Android rendered black-on-black) */
+select{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:40px;
+  background-image:linear-gradient(45deg,transparent 50%,var(--acc) 50%),linear-gradient(135deg,var(--acc) 50%,transparent 50%);
+  background-position:calc(100% - 20px) 50%,calc(100% - 14px) 50%;background-size:6px 6px,6px 6px;background-repeat:no-repeat}
+select:focus{outline:2px solid var(--acc);outline-offset:1px}
+option{background:#18181c;color:#ffe9cc}
