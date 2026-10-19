@@ -780,7 +780,7 @@ inline bool fetch_bealert(const Config &c) {
 }
 
 // ------------------------------------------------------------------ News
-// News sources (setting "Nachrichtenquellen": comma list of codes, max 3). Kinds: 0 WordPress REST
+// News sources (setting "Nachrichtenquellen": comma list of codes, max 6). Kinds: 0 WordPress REST
 // (title.rendered), 1 RSS/Atom (<item>/<entry> titles), 2 tagesschau api2u (news[].title).
 struct NewsSrc { const char *code, *tag; uint8_t kind; const char *url; };
 static const NewsSrc NEWS_SOURCES[] = {
@@ -853,7 +853,7 @@ inline bool fetch_news(const Config &c) {
     return true;
   }
   auto codes = split_csv(c.news_src.empty() ? std::string("bt") : c.news_src);
-  if (codes.size() > 3) codes.resize(3);
+  if (codes.size() > 6) codes.resize(6);
   std::vector<std::vector<std::string>> per;
   std::string err;
   int st = 0;

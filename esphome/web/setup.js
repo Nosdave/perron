@@ -61,7 +61,7 @@
     ["Deutschsprachig", [["ts", "tagesschau · Inland (DE)"], ["tsa", "tagesschau · Ausland (DE)"], ["orf", "ORF (AT)"]]],
   ];
   function newsSources() {
-    const box = h("div", { class: "srcs" }, h("span", { class: "hint" }, "Quellen (max. 3) – je 3 Schlagzeilen, abwechselnd:"));
+    const box = h("div", { class: "srcs" }, h("span", { class: "hint" }, "Quellen (bis zu 6) – Schlagzeilen laufen abwechselnd:"));
     const cur = () => (state.nsrc || "bt").split(",").map((x) => x.trim()).filter(Boolean);
     for (const [grp, items] of NEWS) {
       box.append(h("div", { class: "grp" }, grp));
@@ -70,7 +70,7 @@
         cb.addEventListener("change", async () => {
           let v = cur().filter((c) => c !== code);
           if (cb.checked) v.push(code);
-          if (v.length > 3) { cb.checked = false; toast("Maximal 3 Quellen"); return; }
+          if (v.length > 6) { cb.checked = false; toast("Maximal 6 Quellen"); return; }
           state.nsrc = v.join(",");
           await set(E.nsrc, state.nsrc);
           saved(cb.parentElement);
