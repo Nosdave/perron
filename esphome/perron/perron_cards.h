@@ -98,7 +98,7 @@ struct ImgSlot {
   uint16_t w = 0, h = 0;
   uint16_t *px = nullptr;    // RGB565, row-major
   bool url = false;          // drawn by an online_image component (PNG/BMP from a URL)
-  uint8_t url_fmt = 0;       // 0 png, 1 bmp
+  uint8_t url_fmt = 0;       // 0 png, 1 bmp, 2 jpeg
   bool ready = false;
 };
 inline std::vector<ImgSlot> &img_slots() { static std::vector<ImgSlot> v; return v; }
@@ -197,13 +197,16 @@ inline bool push_image_chunk(const std::string &key, int seq, int total, int w, 
   return true;
 }
 
-// API action push_image_url: the board downloads a PNG or BMP (e.g. HA entity_picture with its
+// API action push_image_url: the board downloads a PNG, JPEG or BMP (e.g. HA entity_picture with its
 // short-lived token). One URL image at a time per format.
 inline void push_image_url(const std::string &key, const std::string &url) {
   if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0) { card_status() = "Bild-URL: nur http(s)"; return; }
   std::string low = url;
   for (auto &c : low) c = tolower(c);
-  uint8_t fmt = (low.find(".bmp") != std::string::npos || low.find("format=bmp") != std::string::npos) ? 1 : 0;
+  uint8_t fmt = 0;
+  if (low.find(".bmp") != std::string::npos || low.find("format=bmp") != std::string::npos) fmt = 1;
+  else if (low.find("camera_proxy") != std::string::npos || low.find(".jpg") != std::string::npos ||
+           low.find(".jpeg") != std::string::npos || low.find("format=jpg") != std::string::npos) fmt = 2;
   for (auto &s : img_slots())  // a format has one decoder: the previous slot of that format goes
     if (s.url && s.url_fmt == fmt && s.key != key) s.ready = false;
   ImgSlot *s = slot(key, true);
@@ -211,7 +214,7 @@ inline void push_image_url(const std::string &key, const std::string &url) {
   s->px = nullptr;
   s->url = true; s->url_fmt = fmt; s->ready = false; s->w = 0; s->h = 0;
   if (url_loader()) url_loader()(fmt, url);
-  card_status() = std::string("Bild-URL ") + (fmt ? "BMP" : "PNG") + " lädt";
+  card_status() = std::string("Bild-URL ") + (fmt == 2 ? "JPEG" : fmt ? "BMP" : "PNG") + " lädt";
 }
 // called from on_download_finished / on_error of the online_image components
 inline void url_image_done(uint8_t fmt, bool ok, int w, int h) {

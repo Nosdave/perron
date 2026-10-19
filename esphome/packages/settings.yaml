@@ -179,6 +179,16 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
+  # Laufschrift der Infozeile: Schritte von 1/2/3 Pixel pro Bild (Anzeige: 20 Bilder/s) -> immer gleichmäßig
+  - platform: template
+    id: cfg_scroll
+    name: "Laufschrift"
+    icon: mdi:format-text-wrapping-overflow
+    options: ["Ruhig (20 px/s)", "Normal (40 px/s)", "Schnell (60 px/s)"]
+    initial_option: "Normal (40 px/s)"
+    optimistic: true
+    restore_value: true
+    entity_category: config
   # Linien mit dunkler Schrift (z. B. 60, S5): voll gefüllt wie im Original oder nur Kontur
   - platform: template
     id: cfg_badge_style
@@ -369,7 +379,7 @@ interval:
           auto li = id(cfg_lang).active_index();
           c.lang = LANGS[li.has_value() ? *li : 0];   // STIB falls back to fr/nl itself
           c.stib_key = std::string(id(g_stib_key).data());
-          c.stib_points = id(cfg_stib_points).state;
+          c.stib_points = perron::normalize_points(id(cfg_stib_points).state);
           c.stib_lines = id(cfg_stib_lines).state;
           c.train_station = id(cfg_train_station).state;
           c.train_filter = id(cfg_train_filter).state;
@@ -390,6 +400,8 @@ interval:
           L.layout = (perron::Layout) (lay.has_value() ? *lay : 0);
           auto bs = id(cfg_badge_style).active_index();
           L.badge_fill = !bs.has_value() || *bs == 0;
+          auto sc = id(cfg_scroll).active_index();
+          L.scroll_px = sc.has_value() ? (int) *sc + 1 : 2;
           L.ui_lang = LANGS[li.has_value() ? *li : 0];
           auto nm = id(cfg_night_mode).active_index();
           L.night = (perron::NightMode) (nm.has_value() ? *nm : 1);
@@ -407,7 +419,7 @@ interval:
           L.free_on = id(sw_free).state;
           L.free_text = id(cfg_free_text).state;
           L.aliases = id(cfg_aliases).state;
-          L.points = id(cfg_stib_points).state;
+          L.points = perron::normalize_points(id(cfg_stib_points).state);
           L.dest_filter = id(cfg_dest_filter).state;
           L.show_walk = id(sw_show_walk).state;
           L.pin_train = id(sw_pin_train).state;

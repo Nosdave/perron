@@ -75,6 +75,7 @@ struct Look {
   bool pin_train = true;     // always keep one row for the next (filtered) train
   bool free_on = false;
   bool badge_fill = true;    // light lines filled (original) vs outline
+  int scroll_px = 2;         // pager scroll: px per 50 ms frame (1 = 20 px/s, 2 = 40, 3 = 60)
   std::string free_text;
   uint32_t version = 0;      // bumped by the settings interval when anything changed
 };
@@ -727,8 +728,8 @@ static void status_bar(Display &it, const Fonts &F, const Model &m, const Look &
 }
 
 // Pager: remembers the shown item by key (stable when the list changes), scrolls long text once
-// 1 px per frame (20 px/s at the 50 ms render tick) after 1.5 s, then holds. Frame-counted, so
-// every step is exactly 1 px (time-based offsets gave uneven 1/2 px jumps = visible judder). Draws only the visible characters (fixed 5 px font).
+// L.scroll_px px per frame (20/40/60 px/s at the 50 ms render tick) after 1.5 s, then holds.
+// Frame-counted, so every step is the same size (time-based offsets gave uneven jumps = judder). Draws only the visible characters (fixed 5 px font).
 static void pager(Display &it, const Fonts &F, const std::vector<PagerItem> &items, const Look &L, int y) {
   static std::string cur_key;
   static uint32_t started = 0, frame_no = 0, start_frame = 0;
@@ -743,7 +744,7 @@ static void pager(Display &it, const Fonts &F, const std::vector<PagerItem> &ite
   const PagerItem *p = &items[idx];
   const int avail = 185;
   int over = p->width - avail;
-  uint32_t need = L.dwell_s * 1000 + (over > 0 ? over * 50 + 2000 : 0);
+  uint32_t need = L.dwell_s * 1000 + (over > 0 ? over * 50 / std::max(1, L.scroll_px) + 2000 : 0);
   if (ms - started > need) {
     idx = (idx + 1) % items.size();
     p = &items[idx];
@@ -754,7 +755,7 @@ static void pager(Display &it, const Fonts &F, const std::vector<PagerItem> &ite
   }
   it.filled_rectangle(1, y + 1, 2, 6, tag_color(p->tag));   // category tag (colour = topic)
   int el = (int) (frame_no - start_frame) - 30;  // 30 frames = 1.5 s hold before scrolling
-  int off = (over > 0 && el > 0) ? std::min(over, el) : 0;
+  int off = (over > 0 && el > 0) ? std::min(over, el * std::max(1, L.scroll_px)) : 0;
   size_t first = off / 5;  // misc-fixed 5x7: 5 px per character
   std::string vis = utf8_sub(p->text, first, avail / 5 + 2);
   it.start_clipping(esphome::display::Rect(6, y, avail, 9));
@@ -822,16 +823,30 @@ static int delay_chip(Display &it, const Fonts &F, int x_right, int y, int delay
   return text_w(F.small, d);
 }
 
+// Trains to Brussels Airport get the airport pictogram (as on SNCB boards).
+static bool airport_dest(const std::string &d) {
+  std::string l = d;
+  for (auto &ch : l) ch = (char) tolower((unsigned char) ch);
+  for (const char *k : {"airport", "aéroport", "aeroport", "luchthaven", "flughafen", "zaventem"})
+    if (l.find(k) != std::string::npos) return true;
+  return false;
+}
+
 // Destination; trains get their scheduled time after it in grey (SNCB boards show both).
 static void dest_txt(Display &it, const Fonts &F, Font *f, int x, int y, const Row &r, int maxw, Color c) {
   std::string plan = (r.train && r.plan_epoch) ? hhmm(r.plan_epoch) : std::string();
+  bool air = r.train && airport_dest(r.dest);
   Font *pf = f == F.tiny ? F.tiny : F.small;
+  int aw = air ? 8 : 0;
   int pw = plan.empty() ? 0 : text_w(pf, plan) + 4;
-  std::string d = fit_words(f, r.dest, maxw - pw);
-  if (d.empty()) { d = fit_words(f, r.dest, maxw); pw = 0; }
-  if (d.empty() && f != F.tiny) { f = F.small; d = fit_words(f, r.dest, maxw); }
+  std::string d = fit_words(f, r.dest, maxw - pw - aw);
+  if (d.empty()) { d = fit_words(f, r.dest, maxw - aw); pw = 0; }
+  if (d.empty() && f != F.tiny) { f = F.small; d = fit_words(f, r.dest, maxw - aw); }
   txt(it, F, f, x, y, d, c);
-  if (pw) txt(it, F, pf, x + text_w(f, d) + 4, y + cap_h(f, F) - cap_h(pf, F), plan, C_SEC);
+  int xe = x + text_w(f, d);
+  int ch = cap_h(f, F);
+  if (air) { icon(it, xe + 3, y + ch - 7, "plane", 7, &c); xe += aw; }
+  if (pw) txt(it, F, pf, xe + 4, y + ch - cap_h(pf, F), plan, C_SEC);
 }
 
 // ------------------------------------------------------------------ iteration 8 layouts

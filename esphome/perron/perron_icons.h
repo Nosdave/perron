@@ -62,6 +62,7 @@ static const Icon ICONS7[] = {
   {"door", 5, 7, "WWWWWW...WW...WW..WWW...WW...WWWWWW"},
   {"sun", 5, 7, "W.W.W.WWW.WW.WW.WWW.W.W.W.........."},
   {"plug", 5, 7, "W...WW...WWWWWWWWWWW.WWW...W....W.."},
+  {"plane", 5, 7, "..W....W...WWW.WWWWW..W....W...WWW."},
   {"info", 5, 7, "..W........WW....W....W....W...WWW."},
 };
 }  // namespace perron

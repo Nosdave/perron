@@ -381,6 +381,20 @@ inline std::vector<std::string> point_ids(const std::string &s) {
   return v;
 }
 
+// STIB real-time pointids are numeric: "1234B:5" (GTFS stop_id) -> "1234:5".
+inline std::string normalize_points(const std::string &s) {
+  std::string o;
+  for (auto &t : split_csv(s)) {
+    size_t c = t.find(':');
+    std::string id = c == std::string::npos ? t : t.substr(0, c);
+    while (!id.empty() && isalpha((unsigned char) id.back())) id.pop_back();
+    if (id.empty()) continue;
+    if (!o.empty()) o += ",";
+    o += id + (c == std::string::npos ? "" : t.substr(c));
+  }
+  return o;
+}
+
 inline bool in_list(const std::vector<std::string> &v, const std::string &x) {
   return v.empty() || std::find(v.begin(), v.end(), x) != v.end();
 }

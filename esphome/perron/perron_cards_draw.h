@@ -196,10 +196,9 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
         txt(it, F, F.clock, x, 23, q.val, vc);
         if (!q.unit.empty()) txt(it, F, n == 3 ? F.small : F.mid, x + vw + 2, n == 3 ? 30 : 29, q.unit, C_SEC);
         if (!q.sub.empty()) txt(it, F, F.tiny, x, 42, fit_words(F.tiny, q.sub, cw - 6), C_SEC);
-        if (q.pct >= 0) {
-          it.filled_rectangle(x, 50, cw - 8, 2, C_W4);
-          it.filled_rectangle(x, 50, (cw - 8) * q.pct / 100, 2, vc);
-        }
+        // every cell gets the same dim base line (consistent grid); a percentage fills it
+        it.filled_rectangle(x, 50, cw - 8, 2, C_W4);
+        if (q.pct >= 0) it.filled_rectangle(x, 50, (cw - 8) * q.pct / 100, 2, vc);
       }
       break;
     }
@@ -283,10 +282,8 @@ static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms
         std::string v = q.val + (q.unit.size() <= 1 ? q.unit : "");
         txt(it, F, F.big, 190, y + 9, v, tokc(q.col), 2);
         if (q.unit.size() > 1) txt(it, F, F.tiny, 130, y + 14, q.unit, C_SEC);
-        if (q.pct >= 0) {
-          it.filled_rectangle(130, y + 23, 60, 2, C_W4);
-          it.filled_rectangle(130, y + 23, 60 * q.pct / 100, 2, tokc(q.col));
-        }
+        it.filled_rectangle(130, y + 23, 60, 2, C_W4);
+        if (q.pct >= 0) it.filled_rectangle(130, y + 23, 60 * q.pct / 100, 2, tokc(q.col));
       }
       break;
     case T_RING: {

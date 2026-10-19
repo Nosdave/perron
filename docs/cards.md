@@ -85,17 +85,18 @@ Elements: `["t",x,y,text,font,col]` text, `["n",…]` number, `["i",x,y,icon,siz
 Images go into named slots (up to 3) and are referenced by cards (`"img":"door"`). Bright
 images are dimmed to an average of 35 % so they stay calm on the LEDs.
 
-**PNG or BMP by URL** – the board downloads it (max 192×64 after scaling):
+**PNG, JPEG or BMP by URL** – the board downloads it (max 192×64 after scaling):
 
 ```yaml
 action: esphome.perron_push_image_url
 data:
   key: door
-  url: "http://<ha-ip>:8123{{ state_attr('camera.front_door', 'entity_picture') }}"
+  url: "http://<ha-ip>:8123{{ state_attr('camera.front_door', 'entity_picture') }}&width=192"
 ```
 
 `entity_picture` contains a short-lived access token, so no long-lived token is stored on the
-board. A URL containing `.bmp` is decoded as BMP, everything else as PNG.
+board. Camera snapshots (`camera_proxy`, `.jpg`) are decoded as JPEG – append `&width=192` so
+Home Assistant scales the picture first; `.bmp` is decoded as BMP, everything else as PNG.
 
 **Raw RGB565 pixels over the API** – no URL needed; base64, little endian, sent in parts of at
 most 8 KB raw data (192×64 = 3 parts):

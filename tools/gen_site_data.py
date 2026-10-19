@@ -92,11 +92,18 @@ def main():
         raw = s["stop_name"]
         lines = sorted(serve[sid], key=lambda x: (len(x[0]), x[0], x[1]))
         stops.append({
-            "id": sid,
+            # STIB real-time API (WaitingTimes pointid) uses the stop_id without letter suffix
+            "id": re.sub(r"[A-Za-z]+$", "", sid),
             "fr": fr_names.get(raw) or title(raw), "nl": nl.get(raw) or title(raw),
             "lat": round(float(s["stop_lat"]), 5), "lon": round(float(s["stop_lon"]), 5),
             "l": [[ln, dest] for ln, dest in lines],  # line + direction (headsign) at this platform
         })
+    merged = {}
+    for st in stops:  # platforms that differ only by the letter suffix share one real-time pointid
+        m = merged.setdefault(st["id"], st)
+        if m is not st:
+            m["l"] += [x for x in st["l"] if x not in m["l"]]
+    stops = list(merged.values())
     colors = line_colors()
     with open(os.path.join(OUT, "stops.json"), "w", encoding="utf-8") as f:
         json.dump({"generated": time.strftime("%Y-%m-%d"), "colors": colors, "stops": stops}, f,

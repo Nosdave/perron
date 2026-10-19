@@ -21,7 +21,8 @@ api:
         data: string
       then:
         - lambda: 'perron::push_image_chunk(key, seq, total, width, height, data);'
-    # PNG oder BMP per Link (z.B. HA entity_picture mit Zugriffstoken); BMP wenn ".bmp" in der URL.
+    # PNG, JPEG oder BMP per Link (z.B. HA entity_picture / camera_proxy mit Zugriffstoken).
+    # JPEG bei camera_proxy, .jpg/.jpeg; BMP bei .bmp; sonst PNG.
     - action: push_image_url
       variables:
         key: string
@@ -40,6 +41,18 @@ online_image:
       - lambda: 'perron::url_image_done(0, true, id(ha_png).get_width(), id(ha_png).get_height());'
     on_error:
       - lambda: 'perron::url_image_done(0, false, 0, 0);'
+  # JPEG: Kamerabilder aus HA (camera_proxy). Tipp: &width=192 an die URL hängen, dann skaliert
+  # HA das Bild vorher und die Datei bleibt klein (JPEG wird komplett im PSRAM dekodiert).
+  - id: ha_jpg
+    url: "http://127.0.0.1/perron.jpg"
+    format: JPEG
+    type: RGB565
+    resize: 192x64
+    buffer_size: 8192
+    on_download_finished:
+      - lambda: 'perron::url_image_done(2, true, id(ha_jpg).get_width(), id(ha_jpg).get_height());'
+    on_error:
+      - lambda: 'perron::url_image_done(2, false, 0, 0);'
   - id: ha_bmp
     url: "http://127.0.0.1/perron.bmp"
     format: BMP
