@@ -111,6 +111,18 @@ packages:
 
 # Diagnose
 sensor:
+  - platform: template
+    id: wx_temp
+    name: "Temperatur (KMI)"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      auto &f = perron::frame();
+      if (!f.m.wx.valid) return NAN;
+      return (float) f.m.wx.temp;
   - platform: debug
     free:
       name: "Heap frei"
@@ -186,6 +198,24 @@ text_sensor:
         o += e;
       }
       return o + "]";
+  - platform: template
+    id: wx_text
+    name: "Wetter (KMI)"
+    icon: mdi:weather-partly-cloudy
+    update_interval: 60s
+    # "partlycloudy 12° (8/15) | Regen ab 22:40 bis 23:30" – Wetterlage, Temperatur, Min/Max, Radar
+    lambda: |-
+      auto &w = perron::frame().m.wx;
+      if (!w.valid) return std::string("");
+      char b[160];
+      snprintf(b, sizeof(b), "%s %d° (%d/%d)", perron::ww_condition(w.ww, w.night), w.temp, w.tmin, w.tmax);
+      std::string o = b;
+      if (w.rain_start) {
+        o += std::string(" | Regen ") + (w.raining_now ? "jetzt" : "ab " + perron::hhmm(w.rain_start));
+        if (w.rain_end) o += " bis " + perron::hhmm(w.rain_end);
+      }
+      if (w.warning_level) o += " | Warnung " + std::to_string(w.warning_level) + ": " + w.warning;
+      return o;
   - platform: template
     id: next_departure
     name: "Nächste Abfahrt"
