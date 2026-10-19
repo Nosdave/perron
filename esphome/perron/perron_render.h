@@ -854,27 +854,26 @@ static void status_slim(Display &it, const Fonts &F, const Model &m, const Look 
   }
 }
 
-// FOUR: 4 equal 12-px rows, every group with its destination.
+// FOUR: 4 equal rows (11 px with status bar + pager, 12 px when there is room), every group
+// with its destination. Trains look exactly like STIB rows; only the badge is SNCB style.
 static void layout_four(Display &it, const Fonts &F, const Frame &fr, const Look &L, int y0) {
-  int bottom = L.pager ? 56 : 64;
-  size_t n = std::min<size_t>(fr.rows.size(), (bottom - y0) / 12);
+  int bottom = L.pager ? 55 : 64;
+  int pitch = (bottom - y0) / 4 >= 12 ? 12 : 11;
+  size_t n = std::min<size_t>(fr.rows.size(), std::max(0, (bottom - y0) / pitch));
   for (size_t i = 0; i < n; i++) {
     const Row &r = fr.rows[i];
-    int y = y0 + i * 12;
-    if (r.train) it.filled_rectangle(0, y, 192, 12, C_SNCB_BG);  // SNCB departure-board style
+    int y = y0 + i * pitch;
     badge(it, F, 1, y + 1, r.line, 22, 10);
     if (L.show_walk) walk_fixed(it, F, 124, y + 2, r.walk);
     minutes_cell(it, F, r, L, 166, y + 1, 191, F.big);
     int dw = (L.show_walk && r.walk > 1 ? 124 : 140) - 27 - 3;
-    txt(it, F, F.mid, 27, y + 3, fit_words(F.mid, r.dest, dw),
-        (r.canceled || r.mins.empty()) ? C_SEC : (r.train ? Color(255, 255, 255) : C_WARM));
+    txt(it, F, F.mid, 27, y + 3, fit_words(F.mid, r.dest, dw), (r.canceled || r.mins.empty()) ? C_SEC : C_WARM);
   }
 }
 
 
 // Compact cell: badge 18 | destination (4x6) | walk (glyph + 4x6) | minutes 9x15B | [delay].
 static void split_cell(Display &it, const Fonts &F, const Row &r, const Look &L, int x0, int x1, int y) {
-  if (r.train) it.filled_rectangle(x0 - 2, y, x1 - x0 + 3, 14, C_SNCB_BG);
   badge(it, F, x0, y + 1, r.line, 18, 12);
   int right = x1;
   int mr;
@@ -907,8 +906,7 @@ static void split_cell(Display &it, const Fonts &F, const Row &r, const Look &L,
   if (dw > 8) {
     std::string d = fit_words(F.tiny, r.dest, dw);
     if (d.empty()) d = utf8_sub(r.dest, 0, dw / 4);
-    Color dc = r.mins.empty() ? C_SEC : (r.train ? Color(255, 255, 255) : C_WARM);
-    txt(it, F, F.tiny, x0 + 21, y + 4, d, dc);
+    txt(it, F, F.tiny, x0 + 21, y + 4, d, r.mins.empty() ? C_SEC : C_WARM);
   }
 }
 

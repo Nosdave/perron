@@ -325,7 +325,6 @@ static void panel_departures(Display &it, const Fonts &F, const Frame &fr, const
   for (size_t i = 0; i < n; i++) {
     const Row &r = fr.rows[i];
     int y = 12 + i * 13;
-    if (r.train) it.filled_rectangle(0, y - 1, 127, 13, C_SNCB_BG);
     badge(it, F, 1, y, r.line, 22, 11);
     int mr;
     if (r.mins.empty()) {
@@ -346,7 +345,7 @@ static void panel_departures(Display &it, const Fonts &F, const Frame &fr, const
       if (r.train && r.delay_min > 0) mr -= delay_chip(it, F, mr - 2, y + 2, r.delay_min) + 2;
     }
     int dw = mr - 27 - 4;
-    Color dc = (r.canceled || r.mins.empty()) ? C_SEC : (r.train ? Color(255, 255, 255) : C_WARM);
+    Color dc = (r.canceled || r.mins.empty()) ? C_SEC : C_WARM;
     std::string d = fit_words(F.mid, r.dest, dw);
     if (!d.empty()) txt(it, F, F.mid, 27, y + 2, d, dc);
     else txt(it, F, F.tiny, 27, y + 3, fit_words(F.tiny, r.dest, dw), dc);
