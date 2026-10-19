@@ -234,7 +234,7 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
     }
     case T_IMG:
       if (c.fb) { draw_slot(it, c.img, 0, 0, 192, 64); return; }
-      draw_slot(it, c.img, 0, 11, 192, 45);
+      draw_slot(it, c.img, 0, 11, 192, 44);  // keep y55+ free for the info line
       if (!c.ti.empty()) txt(it, F, F.small, 4, 13, c.ti, C_WARM);
       break;
     case T_AGENDA: {
@@ -282,7 +282,8 @@ static void agenda_rows(Display &it, const Fonts &F, const HaCard &c, uint32_t m
     }
     txt(it, F, f, x, y, fit_cut(f, r.label, x1 - x), r.col == K_S ? C_SEC : C_WARM);
   }
-  if (pages > 1) txt(it, F, F.tiny, x1, y0 + per_page * pitch, std::to_string(pg + 1) + "/" + std::to_string(pages), C_SEC, 2);
+  // page counter in the header line (never on top of the info line at the bottom)
+  if (pages > 1) txt(it, F, F.tiny, x1, y0 - (f == F.tiny ? 10 : 9), std::to_string(pg + 1) + "/" + std::to_string(pages), C_SEC, 2);
 }
 
 static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms) {
