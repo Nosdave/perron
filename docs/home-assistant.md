@@ -34,6 +34,12 @@ data:
 
 `esphome.perron_clear_alert` removes a full-screen alert sent with `prio: 0`.
 
+## Rich cards and images
+
+`esphome.perron_push_json` shows template cards (progress, numbers, lists, messages, doorbell,
+images, free canvas) on the full screen, on panel 3 or in the pager; `push_image` and
+`push_image_url` send PNG/BMP or raw RGB565 images. See [cards.md](cards.md).
+
 ## Blueprint
 
 [`blueprints/automation/perron_info_cards.yaml`](../blueprints/automation/perron_info_cards.yaml)

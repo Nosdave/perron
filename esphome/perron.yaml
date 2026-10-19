@@ -21,7 +21,7 @@ esphome:
   friendly_name: ${friendly_name}
   project:
     name: nosdave.perron
-    version: "0.4.0"
+    version: "0.5.0"
   on_boot:
     priority: 600
     then:
@@ -32,11 +32,23 @@ esphome:
             g.fill(0);
             strncpy(g.data(), blob.c_str(), g.size() - 1);
           };
+          // Bildkarten per URL (packages/cards.yaml)
+          perron::url_loader() = [](uint8_t fmt, const std::string &url) {
+            auto *img = fmt ? id(ha_bmp) : id(ha_png);
+            img->set_url(url);
+            img->update();
+          };
+          perron::url_drawer() = [](void *d, uint8_t fmt, int x, int y) {
+            auto *disp = static_cast<esphome::display::Display *>(d);
+            disp->image(x, y, fmt ? id(ha_bmp) : id(ha_png));
+          };
   includes:
     - perron/perron_core.h
     - perron/perron_icons.h
     - perron/perron_lines.h
+    - perron/perron_cards.h
     - perron/perron_render.h
+    - perron/perron_cards_draw.h
 
 esp32:
   board: adafruit_matrixportal_esp32s3   # verifiziert 18.10. (ESPHome 2026.5)
@@ -123,6 +135,7 @@ packages:
   display:    !include packages/display.yaml
   transit:    !include packages/transit.yaml
   light:      !include packages/light.yaml
+  cards:      !include packages/cards.yaml
 
 # Diagnose
 sensor:

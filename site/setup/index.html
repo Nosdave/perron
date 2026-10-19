@@ -63,7 +63,7 @@
   const RET_OK = /^http:\/\/((10|127)\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|[a-z0-9-]+\.local)(:\d+)?$/i.test(ret);
   const $ = (id) => document.getElementById(id);
   let STOPS = [], COLORS = {}, STATIONS = [], here = null;
-  const sel = new Map();          // pointid -> Set(lines)
+  const sel = new Map();          // pointid -> Set("line|destination") – one chip = one direction
   let station = null, walk = 3, walkTouched = false;
 
   const dist = (a, b) => {
@@ -106,12 +106,13 @@
         for (const [line, dest] of p.l) {
           const chip = document.createElement("span"); chip.className = "chip";
           chip.append(badge(line), document.createTextNode("→ " + dest));
-          const on = () => sel.has(p.id) && sel.get(p.id).has(line);
+          const k = line + "|" + dest;
+          const on = () => sel.has(p.id) && sel.get(p.id).has(k);
           if (on()) chip.classList.add("on");
           chip.onclick = () => {
             if (!sel.has(p.id)) sel.set(p.id, new Set());
             const set = sel.get(p.id);
-            set.has(line) ? set.delete(line) : set.add(line);
+            set.has(k) ? set.delete(k) : set.add(k);
             if (!set.size) sel.delete(p.id);
             chip.classList.toggle("on", on());
             autoWalk();
@@ -173,8 +174,26 @@
       const s = STOPS.find(x => x.id === id);
       return (here && s) ? `${id}:${Math.max(0, Math.round(dist(here, s) / 80))}` : id;
     });
-    const lines = [...new Set([...sel.values()].flatMap(s => [...s]))];
-    const p = { v: 1, points: points.join(","), lines: lines.join(","), walk };
+    const picked = [...sel.values()].flatMap(s => [...s]);          // "line|dest"
+    const lines = [...new Set(picked.map(k => k.split("|")[0]))];
+    // Destination filter: only for lines where the user left out a direction the selected
+    // platforms also serve (e.g. 60 -> Delta but not -> De Brouckère). Keyword = longest
+    // word of the headsign; the board matches it case-insensitively inside the live destination.
+    const keyword = (d) => d.split(/[\s\/]+/).filter(w => !/^(via|place|gare|porte|de|du|la|le|st|ste)$/i.test(w))
+                           .sort((a, b) => b.length - a.length)[0] || d;
+    const dfil = [];
+    for (const line of lines) {
+      const offered = new Set(), chosen = new Set();
+      for (const [id, set] of sel) {
+        const s = STOPS.find(x => x.id === id);
+        if (s) for (const [l, d] of s.l) if (l === line) offered.add(d);
+        for (const k of set) if (k.split("|")[0] === line) chosen.add(k.slice(line.length + 1));
+      }
+      if (chosen.size < offered.size) {
+        for (const w of new Set([...chosen].map(keyword))) dfil.push(line + "=" + w);
+      }
+    }
+    const p = { v: 1, points: points.join(","), lines: lines.join(","), dfilter: dfil.join(";"), walk };
     if (station) p.station = station.id;
     if (here) p.location = here.lat.toFixed(3) + "," + here.lon.toFixed(3);  // ~100 m: enough for weather/alerts
     return p;

@@ -88,6 +88,7 @@
     const jobs = [];
     if (p.points !== undefined) jobs.push(set(E.points, p.points));
     if (p.lines !== undefined) jobs.push(set(E.lines, p.lines));
+    if (p.dfilter !== undefined) jobs.push(set(E.dfilter, p.dfilter));
     if (p.station) jobs.push(set(E.station, p.station));
     if (p.location) jobs.push(set(E.loc, p.location));
     if (p.walk !== undefined) jobs.push(set(E.walk, p.walk));
