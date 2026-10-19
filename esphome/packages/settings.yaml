@@ -325,6 +325,13 @@ switch:
     restore_mode: RESTORE_DEFAULT_ON
     entity_category: config
   - platform: template
+    id: sw_sncb_logo
+    name: "SNCB-Logo beim Zug"
+    icon: mdi:train
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+  - platform: template
     id: sw_news
     name: "Schlagzeilen"
     icon: mdi:newspaper
@@ -413,6 +420,7 @@ interval:
           L.layout = (perron::Layout) (lay.has_value() ? *lay : 0);
           auto bs = id(cfg_badge_style).active_index();
           L.badge_fill = !bs.has_value() || *bs == 0;
+          L.sncb_logo = id(sw_sncb_logo).state;
           auto sc = id(cfg_scroll).active_index();
           L.scroll_px = sc.has_value() ? (int) *sc + 1 : 2;
           L.ui_lang = LANGS[li.has_value() ? *li : 0];
