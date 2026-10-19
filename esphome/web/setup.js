@@ -17,7 +17,7 @@
     bright: N("Helligkeit"), nbright: N("Helligkeit Nacht"), glass: N("Frontscheibe Lichtdurchlass"), walk: N("Gehzeit zur Haltestelle"), wtrain: N("Gehzeit zum Bahnhof"),
     horizon: N("Vorschau"), dwell: N("Infozeile Wechsel"),
     wx: SW("Wetter (KMI)"), bea: SW("BE-Alert"), disr: SW("STIB-Störungen"), news: SW("Schlagzeilen"),
-    second: SW("Zweite Abfahrt"), showwalk: SW("Gehzeit anzeigen"), pintrain: SW("Zug immer anzeigen"), autoup: SW("Automatische Updates"), autob: SW("Automatische Helligkeit"), status: SW("Statusleiste"), pager: SW("Infozeile"), freeon: SW("Freitext anzeigen"),
+    second: SW("Zweite Abfahrt"), showwalk: SW("Gehzeit anzeigen"), pintrain: SW("Zug immer anzeigen"), sncblogo: SW("SNCB-Logo beim Zug"), autoup: SW("Automatische Updates"), autob: SW("Automatische Helligkeit"), status: SW("Statusleiste"), pager: SW("Infozeile"), freeon: SW("Freitext anzeigen"),
   };
   const enc = encodeURIComponent;
   const url = ([d, n]) => `/${d}/${enc(n)}`;
@@ -172,6 +172,7 @@
       field("Zugfilter", "tfilter", { ph: "z. B. p2 oder S5,S19", hint: "p2 = nur Gleis 2; Liniennamen oder Ziele, kommagetrennt." }),
       range("Gehzeit zum Bahnhof", "wtrain", 0, 30, 1, " min"),
       toggle("Zug immer anzeigen", "pintrain", "Reserviert eine Zeile für den nächsten Zug (Zugfilter, z. B. stadteinwärts), auch wenn er später fährt."),
+      toggle("SNCB-Logo beim Zug", "sncblogo", "Zeigt das SNCB-Oval-B vor dem Zugziel."),
       field("Pendeln von (iRail-ID)", "cfrom", { ph: "BE.NMBS.0088…" }),
       field("Pendeln nach (iRail-ID)", "cto", { ph: "BE.NMBS.0088…" }),
       h("p", { class: "hint" }, "Auto-Fahrzeiten (Waze) und Kalender kommen über die Home-Assistant-Integration."),

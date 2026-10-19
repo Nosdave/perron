@@ -75,6 +75,7 @@ struct Look {
   bool pin_train = true;     // always keep one row for the next (filtered) train
   bool free_on = false;
   bool badge_fill = true;    // light lines filled (original) vs outline
+  bool sncb_logo = true;     // SNCB "B" oval before train destinations
   int scroll_px = 2;         // pager scroll: px per 50 ms frame (1 = 20 px/s, 2 = 40, 3 = 60)
   std::string free_text;
   uint32_t version = 0;      // bumped by the settings interval when anything changed
@@ -842,6 +843,18 @@ static bool airport_dest(const std::string &d) {
 static void dest_txt(Display &it, const Fonts &F, Font *f, int x, int y, const Row &r, int maxw, Color c) {
   std::string plan = (r.train && r.plan_epoch) ? hhmm(r.plan_epoch) : std::string();
   bool air = r.train && airport_dest(r.dest);
+  int ch = cap_h(f, F);
+  if (r.train && look().sncb_logo && maxw > 30) {  // SNCB "B" oval, white on SNCB blue (9x9)
+    static const char *const B9[9] = {"..#####..", ".#.....#.", "#..###..#", "#..#..#.#", "#..###..#",
+                                      "#..#..#.#", "#..###..#", ".#.....#.", "..#####.."};
+    int ly = y + ch / 2 - 4;
+    it.filled_rectangle(x, ly, 9, 9, Color(0x01, 0x6A, 0xB3));
+    for (int j = 0; j < 9; j++)
+      for (int i = 0; i < 9; i++)
+        if (B9[j][i] == '#') it.draw_pixel_at(x + i, ly + j, Color(255, 255, 255));
+    x += 12;
+    maxw -= 12;
+  }
   Font *pf = f == F.tiny ? F.tiny : F.small;
   int aw = air ? 8 : 0;
   int pw = plan.empty() ? 0 : text_w(pf, plan) + 4;
@@ -850,7 +863,7 @@ static void dest_txt(Display &it, const Fonts &F, Font *f, int x, int y, const R
   if (d.empty() && f != F.tiny) { f = F.small; d = fit_words(f, r.dest, maxw - aw); }
   txt(it, F, f, x, y, d, c);
   int xe = x + text_w(f, d);
-  int ch = cap_h(f, F);
+  ch = cap_h(f, F);
   static const Color C_PLANE(0x41, 0x9B, 0xF5);  // airport pictogram in blue
   if (air) { icon(it, xe + 3, y + ch - 7, "plane", 7, &C_PLANE); xe += aw; }
   if (pw) txt(it, F, pf, xe + 4, y + ch - cap_h(pf, F), plan, C_SEC);
