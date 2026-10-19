@@ -237,8 +237,10 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
       if (!c.img.empty() && slot_ready(c.img)) draw_slot(it, c.img, 1, 11, 60, 44, fit_of(c, 'l'), c.fy);
       else icon(it, 22, 25, c.ic.empty() ? "bell" : c.ic.c_str(), 16, &tc);
       txt(it, F, F.dest, 66, 13, fit_words(F.dest, c.ti, 124), tc);
-      txt(it, F, F.mid, 66, 31, fit_words(F.mid, c.sub, 124), C_WARM);
-      if (c.at) txt(it, F, F.small, 66, 45, hhmm(c.at), C_SEC);
+      split2(c.sub, a, b);  // "klingelt|17:57": text | time line (default: time received)
+      txt(it, F, F.mid, 66, 31, fit_words(F.mid, a, 124), C_WARM);
+      if (!b.empty()) txt(it, F, F.small, 66, 45, fit_words(F.small, b, 124), C_SEC);
+      else if (c.at) txt(it, F, F.small, 66, 45, hhmm(c.at), C_SEC);
       break;
     }
     case T_IMG:
@@ -367,7 +369,9 @@ static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms
       if (!c.img.empty() && slot_ready(c.img)) draw_slot(it, c.img, 128, 0, 64, 44, fit_of(c, 'l'), c.fy);
       else icon(it, 152, 10, c.ic.empty() ? "bell" : c.ic.c_str(), 16, &tc);
       txt(it, F, F.small, 160, 46, fit_words(F.small, c.ti, 60), tc, 1);
-      if (c.at) txt(it, F, F.tiny, 160, 56, hhmm(c.at), C_SEC, 1);
+      split2(c.sub, a, b);
+      if (!b.empty()) txt(it, F, F.tiny, 160, 56, fit_words(F.tiny, b, 60), C_SEC, 1);
+      else if (c.at) txt(it, F, F.tiny, 160, 56, hhmm(c.at), C_SEC, 1);
       break;
     }
     case T_IMG:
