@@ -53,6 +53,7 @@ struct Config {
   std::string commute_from, commute_to;  // iRail station ids for the PT commute; empty = off
   float lat = 50.846f, lon = 4.352f;  // home position (weather + BE-Alert); default Brussels centre
   bool weather_on = true, bealert_on = true, news_on = false, disruptions_on = true;
+  std::string news_src = "bt";  // news source codes (see NEWS_SOURCES)
   bool any() const { return !stib_points.empty() || !train_station.empty(); }
 };
 
@@ -138,7 +139,7 @@ inline void set_config(const Config &c) {
                  cur.train_filter != c.train_filter || cur.commute_from != c.commute_from ||
                  cur.commute_to != c.commute_to || std::fabs(cur.lat - c.lat) > 1e-4 ||
                  std::fabs(cur.lon - c.lon) > 1e-4 || cur.weather_on != c.weather_on ||
-                 cur.bealert_on != c.bealert_on || cur.news_on != c.news_on ||
+                 cur.bealert_on != c.bealert_on || cur.news_on != c.news_on || cur.news_src != c.news_src ||
                  cur.disruptions_on != c.disruptions_on;
   cur = c;
   if (changed) cfg_dirty() = true;
@@ -779,17 +780,116 @@ inline bool fetch_bealert(const Config &c) {
 }
 
 // ------------------------------------------------------------------ News
+// News sources (setting "Nachrichtenquellen": comma list of codes, max 3). Kinds: 0 WordPress REST
+// (title.rendered), 1 RSS/Atom (<item>/<entry> titles), 2 tagesschau api2u (news[].title).
+struct NewsSrc { const char *code, *tag; uint8_t kind; const char *url; };
+static const NewsSrc NEWS_SOURCES[] = {
+    {"bt", "BT", 0, "https://api.brusselstimes.com/wp-json/wp/v2/posts?per_page=4&_fields=title&categories=389"},
+    {"btb", "BT", 0, "https://api.brusselstimes.com/wp-json/wp/v2/posts?per_page=4&_fields=title&categories=396"},
+    {"bteu", "BT", 0, "https://api.brusselstimes.com/wp-json/wp/v2/posts?per_page=4&_fields=title&categories=403"},
+    {"btw", "BT", 0, "https://api.brusselstimes.com/wp-json/wp/v2/posts?per_page=4&_fields=title&categories=407"},
+    {"bx1", "BX1", 0, "https://bx1.be/wp-json/wp/v2/posts?per_page=4&_fields=title"},
+    {"bul", "Bulletin", 1, "https://www.thebulletin.be/rss.xml"},
+    {"vrt", "VRT", 1, "https://www.vrt.be/vrtnws/nl.rss.articles.xml"},
+    {"llb", "La Libre", 1, "https://www.lalibre.be/arc/outboundfeeds/rss/?outputType=xml"},
+    {"en", "Euronews", 1, "https://www.euronews.com/rss?level=theme&name=news"},
+    {"enb", "Euronews", 1, "https://www.euronews.com/rss?level=theme&name=business"},
+    {"pol", "Politico", 1, "https://www.politico.eu/feed/"},
+    {"bbc", "BBC", 1, "https://feeds.bbci.co.uk/news/world/rss.xml"},
+    {"ts", "tagesschau", 2, "https://www.tagesschau.de/api2u/news/?ressort=inland"},
+    {"tsa", "tagesschau", 2, "https://www.tagesschau.de/api2u/news/?ressort=ausland"},
+    {"orf", "ORF", 1, "https://rss.orf.at/news.xml"},
+};
+
+inline std::string strip_markup(std::string t) {
+  size_t a;
+  while ((a = t.find("<![CDATA[")) != std::string::npos) t.erase(a, 9);
+  while ((a = t.find("]]>")) != std::string::npos) t.erase(a, 3);
+  std::string o;
+  bool tag = false;
+  for (char ch : t) {
+    if (ch == '<') tag = true;
+    else if (ch == '>') tag = false;
+    else if (!tag) o += (ch == '\n' || ch == '\r' || ch == '\t') ? ' ' : ch;
+  }
+  while (!o.empty() && o.front() == ' ') o.erase(o.begin());
+  while (!o.empty() && o.back() == ' ') o.pop_back();
+  return o;
+}
+
+// Streams an RSS/Atom feed and collects the first n item titles (stops reading after that).
+inline std::string rss_titles(const std::string &url, size_t n, std::vector<std::string> &out, int &status) {
+  Http http;
+  status = http.open(url);
+  if (status != 200) return status < 0 ? "Verbindung fehlgeschlagen" : "HTTP " + std::to_string(status);
+  HttpReader rd(http.h, 400 * 1024);
+  std::string win;          // rolling window of the last characters
+  bool in_item = false;
+  int ch;
+  while (out.size() < n && (ch = rd.read()) >= 0) {
+    win += (char) ch;
+    if (win.size() > 12) win.erase(0, win.size() - 12);
+    auto ends = [&](const char *s) { size_t k = strlen(s); return win.size() >= k && win.compare(win.size() - k, k, s) == 0; };
+    if (ends("<item>") || ends("<item ") || ends("<entry>") || ends("<entry ")) in_item = true;
+    else if (ends("</item>") || ends("</entry>")) in_item = false;
+    else if (in_item && (ends("<title>") || ends("<title "))) {
+      if (win.back() == ' ') while ((ch = rd.read()) >= 0 && ch != '>') {}
+      std::string t;
+      while ((ch = rd.read()) >= 0 && t.size() < 600) {
+        t += (char) ch;
+        if (t.size() >= 8 && t.compare(t.size() - 8, 8, "</title>") == 0) { t.resize(t.size() - 8); break; }
+      }
+      t = led_safe(html_unescape(strip_markup(t)));
+      if (!t.empty()) out.push_back(t);
+      win.clear();
+    }
+  }
+  return out.empty() ? "keine Titel" : "";
+}
+
 inline bool fetch_news(const Config &c) {
   if (!c.news_on) {
     Lock l; model_storage().news.clear(); model_storage().gen++;
     return true;
   }
-  JsonDocument doc(PsramAllocator::instance());
-  int st;
-  std::string e = get_json("https://api.brusselstimes.com/wp-json/wp/v2/posts?per_page=5&_fields=title", doc, st);
-  if (!e.empty()) return fail(SRC_NEWS, e, st);
-  std::vector<std::string> out;
-  for (JsonVariantConst p : doc.as<JsonArrayConst>()) out.push_back(led_safe(html_unescape(p["title"]["rendered"] | "")));
+  auto codes = split_csv(c.news_src.empty() ? std::string("bt") : c.news_src);
+  if (codes.size() > 3) codes.resize(3);
+  std::vector<std::vector<std::string>> per;
+  std::string err;
+  int st = 0;
+  for (auto &code : codes) {
+    const NewsSrc *src = nullptr;
+    for (auto &s : NEWS_SOURCES)
+      if (code == s.code) src = &s;
+    if (!src) continue;
+    std::vector<std::string> titles;
+    std::string e;
+    if (src->kind == 1) {
+      e = rss_titles(src->url, 3, titles, st);
+    } else {
+      JsonDocument filter;
+      if (src->kind == 0) filter[0]["title"]["rendered"] = true;
+      else filter["news"][0]["title"] = true;
+      JsonDocument doc(PsramAllocator::instance());
+      e = get_json(src->url, doc, st, &filter, 512 * 1024);
+      if (e.empty()) {
+        JsonArrayConst arr = src->kind == 0 ? doc.as<JsonArrayConst>() : doc["news"].as<JsonArrayConst>();
+        for (JsonVariantConst p : arr) {
+          if (titles.size() >= 3) break;
+          const char *t = src->kind == 0 ? (p["title"]["rendered"] | "") : (p["title"] | "");
+          if (*t) titles.push_back(led_safe(html_unescape(t)));
+        }
+      }
+    }
+    if (!e.empty()) { err = std::string(src->code) + ": " + e; continue; }
+    for (auto &t : titles) t = std::string(src->tag) + ": " + t;
+    per.push_back(std::move(titles));
+  }
+  if (per.empty()) return fail(SRC_NEWS, err.empty() ? "keine Quelle" : err, st);
+  std::vector<std::string> out;  // interleave the sources: A1 B1 C1 A2 B2 ...
+  for (size_t i = 0; i < 3; i++)
+    for (auto &v : per)
+      if (i < v.size()) out.push_back(v[i]);
   {
     Lock l;
     model_storage().news = std::move(out);

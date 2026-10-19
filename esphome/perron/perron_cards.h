@@ -11,6 +11,7 @@
 
 #include "esp_heap_caps.h"
 #include "mbedtls/base64.h"
+#include "esphome/core/color.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
@@ -52,12 +53,15 @@ struct HaCard {
   uint8_t tag = K_HA;
   uint8_t ac = K_N;          // accent token (K_N = from the tag colour)
   uint32_t ttl = 0, hold = 15, expires = 0;
+  uint32_t every = 0, show = 10;  // occasional: visible `show` s every `every` s (0 = always)
   uint32_t since_ms = 0;     // when the content last changed (p1 hold window)
   uint32_t at = 0;           // epoch of the last content change (shown on ring cards)
   uint32_t hash = 0;
   std::string ic, ti, val, u, sub, ft, img;
   int pct = -1;
   bool fb = false;           // img: full bleed 192x64 (max 10 s)
+  char fit = 0;              // image fit: 'c' cover (fill + crop), 'l' letterbox (whole image); 0 = template default
+  int fy = 50;               // cover: vertical crop position 0 (top) .. 100 (bottom)
   std::vector<ListRow> rows;
   std::vector<KpiCell> kpi;
   std::vector<CardEl> el;
@@ -220,13 +224,33 @@ inline void push_image_url(const std::string &key, const std::string &url) {
   if (url_loader()) url_loader()(fmt, url);
   card_status() = std::string("Bild-URL ") + (fmt == 2 ? "JPEG" : fmt ? "BMP" : "PNG") + " lädt";
 }
-// called from on_download_finished / on_error of the online_image components
+// called from on_download_finished of the online_image components: copies the decoded image
+// (fits 192x192, aspect kept) into the waiting slot as RGB565, so it can be scaled/cropped at
+// draw time like pushed pixels; the component buffer is released afterwards (YAML).
+inline void url_image_store(uint8_t fmt, int w, int h, const std::function<esphome::Color(int, int)> &px) {
+  if (w <= 0 || h <= 0) return;
+  for (auto &s : img_slots()) {
+    if (!s.url || s.url_fmt != fmt || s.ready) continue;
+    heap_caps_free(s.px);
+    s.px = (uint16_t *) heap_caps_malloc(size_t(w) * h * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!s.px) { card_status() = "Bild-URL: kein Speicher"; return; }
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++) {
+        esphome::Color c = px(x, y);
+        s.px[y * w + x] = ((c.r & 0xF8) << 8) | ((c.g & 0xFC) << 3) | (c.b >> 3);
+      }
+    clamp_luma(s.px, size_t(w) * h);
+    s.w = w; s.h = h; s.ready = true; s.url = false;
+    cards_gen()++;
+    card_status() = "Bild-URL ok " + std::to_string(w) + "x" + std::to_string(h);
+    return;
+  }
+}
 inline void url_image_done(uint8_t fmt, bool ok, int w, int h) {
+  if (ok) return;  // success is handled by url_image_store
   for (auto &s : img_slots())
-    if (s.url && s.url_fmt == fmt) { s.ready = ok; s.w = w; s.h = h; }
-  cards_gen()++;
-  card_status() = ok ? std::string("Bild-URL ok ") + std::to_string(w) + "x" + std::to_string(h)
-                     : std::string("Bild-URL Fehler");
+    if (s.url && s.url_fmt == fmt) s.ready = false;
+  card_status() = "Bild-URL Fehler";
 }
 
 // ------------------------------------------------------------------ JSON card parser
@@ -293,6 +317,9 @@ inline std::string card_json(const std::string &json) {
   c.ac = ac < 0 ? K_N : ac;
   c.ttl = std::max(0, (int) (o["ttl"] | 0));
   c.hold = std::max(3, std::min(30, (int) (o["hold"] | 15)));
+  c.every = std::max(0, std::min(86400, (int) (o["every"] | 0)));
+  c.show = std::max(3, std::min(60, (int) (o["show"] | 10)));
+  if (c.every && c.every < c.show + 20) c.every = c.show + 20;
   c.ic = jstr(o["ic"], 16);
   c.ti = jstr(o["ti"], 24);
   c.val = jstr(o["val"], 8);
@@ -302,6 +329,9 @@ inline std::string card_json(const std::string &json) {
   c.img = jstr(o["img"], 24);
   c.pct = o["pct"].is<int>() ? std::max(0, std::min(100, o["pct"].as<int>())) : -1;
   c.fb = (o["fb"] | 0) != 0;
+  std::string fit = o["fit"] | "";
+  c.fit = (fit == "c" || fit == "l") ? fit[0] : 0;
+  c.fy = std::max(0, std::min(100, (int) (o["fy"] | 50)));
   for (JsonArrayConst r : o["rows"].as<JsonArrayConst>()) {
     if (c.rows.size() >= (c.t == T_AGENDA ? 8u : 4u)) break;
     ListRow lr;

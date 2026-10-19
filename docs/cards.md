@@ -33,6 +33,7 @@ reason a card was rejected. The **Karten-Demo** button cycles through example ca
 | `ac` | accent colour of icon, title, unit and bar: `y` yellow, `g` green, `b` blue, `v` violet (default: the tag colour) |
 | `ttl` | seconds until the card disappears (0 = until removed) |
 | `hold` | seconds on the full screen for a `p:1` event (3–30, default 15) |
+| `every` `show` | occasional card: kept up to date (long `ttl`) but shown only `show` s (default 10) every `every` s, in its zone (`z:"f"` full screen or panel); 0 = always |
 | `ic` `ti` `val` `u` `sub` `ft` `pct` | icon, title, value, unit, secondary text, footer, percent |
 
 `sub` takes two parts separated by `|` (left/right or first/second line).
@@ -57,7 +58,7 @@ reason a card was rejected. The **Karten-Demo** button cycles through example ca
 | `msg` | text message, paged | `ti` `sub` (up to 200 characters) |
 | `kpi` | 2–3 numbers side by side | `kpi: [[label, value, unit, colour, pct, sub, icon], …]` – colour `w` = card accent, or `y`/`g`/`b`/`v` per cell |
 | `ring` | doorbell / visitor | `ic` `ti` `sub` `img` |
-| `img` | image | `img` (slot name), `ti`, `ft`, `fb:1` = full bleed 192×64 (max 10 s) |
+| `img` | image | `img` (slot name), `ti`, `ft`, `fb:1` = full bleed 192×64 (max 10 s); `fit`: `c` fill + crop (default), `l` whole image with bars (default for `ring`); `fy` 0–100 = vertical crop position |
 | `cv` | free canvas | `el` (see below) |
 | `agenda` | today's appointments, time column, pages of 3 (full) / 5 (panel) | `ic` `ti` `rows: [[icon, text, time, colour], …]` (up to 8) |
 

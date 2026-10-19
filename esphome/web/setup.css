@@ -35,3 +35,4 @@ select{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:40px
   background-position:calc(100% - 20px) 50%,calc(100% - 14px) 50%;background-size:6px 6px,6px 6px;background-repeat:no-repeat}
 select:focus{outline:2px solid var(--acc);outline-offset:1px}
 option{background:#18181c;color:#ffe9cc}
+.srcs{margin:4px 0 8px 34px}.srcs .grp{color:var(--sec);font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin:10px 0 2px}.srcs label.t{margin:6px 0}
