@@ -1,12 +1,12 @@
 blueprint:
-  name: Perron – Infokarten aus Home Assistant
+  name: Perron – info cards from Home Assistant
   description: >-
     Schickt Fahrzeiten (z. B. Waze-Travel-Time-Sensoren), die nächsten Kalendertermine und
     einen optionalen Freitext als Infokarten an die Diele-LED-Tafel (ESPHome-Aktion
     `push_card`). Die Tafel holt Tram, Bus, Zug, Wetter und BE-Alert selbst – diese
     Blueprint ergänzt nur, was nur Home Assistant weiß.
   domain: automation
-  source_url: https://github.com/Nosdave/perron/blob/main/blueprints/automation/diele_board_infokarten.yaml
+  source_url: https://github.com/Nosdave/perron/blob/main/blueprints/automation/perron_info_cards.yaml
   input:
     board_action:
       name: ESPHome-Aktion der Tafel
@@ -18,7 +18,10 @@ blueprint:
         text: {}
     commute_sensors:
       name: Fahrzeit-Sensoren
-      description: Sensoren mit Minuten als Zustand (z. B. Waze Travel Time). Name = Beschriftung auf der Tafel.
+      description: >-
+        Sensoren mit Minuten als Zustand (z. B. Waze Travel Time). Name = Beschriftung auf der Tafel.
+        Nur Sensoren mit aktivem Abruf wählen – bei ausgeschaltetem Polling würden eingefrorene
+        Werte gesendet.
       default: []
       selector:
         entity:
@@ -50,10 +53,10 @@ mode: queued
 max: 3
 
 # Alle 5 min + beim HA-Start (Zustands-Auslöser auf optionale, evtl. leere Eingaben wären ungültig).
-trigger:
-  - platform: time_pattern
+triggers:
+  - trigger: time_pattern
     minutes: "/5"
-  - platform: homeassistant
+  - trigger: homeassistant
     event: start
 
 variables:
@@ -63,7 +66,7 @@ variables:
   calendar_hours: !input calendar_hours
   free_text: !input free_text
 
-action:
+actions:
   # 1) Fahrzeiten (Tag 1 = Pendeln). TTL 15 min: wird alle 5 min erneuert.
   - repeat:
       for_each: "{{ commute_sensors }}"
