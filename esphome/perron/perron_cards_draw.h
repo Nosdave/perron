@@ -9,7 +9,6 @@
 
 namespace perron {
 
-static const Color C_FOOT(0xB0, 0xA9, 0x9E);
 static const Color C_W2(0x80, 0x74, 0x66);
 static const Color C_W4(0x40, 0x3A, 0x33);
 
@@ -23,6 +22,10 @@ static Color tokc(uint8_t k) {
     case K_NV: return C_SNCB_BG;
     case K_W2: return C_W2;
     case K_W4: return C_W4;
+    case K_Y: return Color(0xFF, 0xC4, 0x00);
+    case K_G: return Color(0x4F, 0xD1, 0x8B);
+    case K_B: return Color(0x41, 0xBD, 0xF5);
+    case K_V: return Color(0xB4, 0x8C, 0xFF);
     default: return tag_color(k - K_CAL);  // same order as enum Tag
   }
 }
@@ -36,6 +39,12 @@ static Font *fnt(const Fonts &F, uint8_t f) {
     default: return F.small;
   }
 }
+// card accent: explicit "ac", else the topic (tag) colour
+static Color accent(const HaCard &c) { return tokc(c.ac != K_N ? c.ac : c.tag); }
+static Color dimc(Color c, int pct = 75) { return Color(c.r * pct / 100, c.g * pct / 100, c.b * pct / 100); }
+// cell/row colour: the default warm white means "use the card accent"
+static Color cell_accent(const HaCard &c, uint8_t col) { return col == K_W ? accent(c) : tokc(col); }
+
 static Color sev_color(const HaCard &c, Color info = C_WARM) {
   return c.s == 'a' ? C_CATCH : c.s == 'x' ? C_LEAVE : info;
 }
@@ -84,14 +93,6 @@ static void seg_bar(Display &it, int x0, int x1, int y, int h, int pct, Color fi
   for (int k = 0; k < n; k++) it.filled_rectangle(x0 + k * 4, y, 3, h, k < lit ? fill : C_W4);
 }
 
-static void card_footer(Display &it, const Fonts &F, const HaCard &c, const std::string &meta) {
-  it.filled_rectangle(1, 57, 2, 6, tokc(c.tag));
-  int mw = meta.empty() ? 0 : text_w(F.small, meta) + 4;
-  std::string cap = c.ft.empty() ? (c.t == T_MSG || c.t == T_PROG || c.t == T_RING ? "" : c.ti) : c.ft;
-  txt(it, F, F.small, 6, 57, fit_words(F.small, cap, 185 - mw), C_FOOT);
-  if (!meta.empty()) txt(it, F, F.small, 191, 57, meta, C_SEC, 2);
-}
-
 static void canvas(Display &it, const Fonts &F, const HaCard &c) {
   for (auto &e : c.el) {
     Color col = tokc(e.col);
@@ -129,11 +130,12 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
   switch (c.t) {
     case T_HERO: {
       int x = 26;
-      if (!c.ic.empty()) icon(it, 4, 14, c.ic.c_str(), 16, &hc);
+      Color ac = c.s == 'i' ? accent(c) : hc;
+      if (!c.ic.empty()) icon(it, 4, 14, c.ic.c_str(), 16, &ac);
       else x = 4;
       int vw = text_w(F.clock, c.val);
-      txt(it, F, F.clock, x, 16, c.val, hc);
-      if (!c.u.empty()) txt(it, F, F.mid, x + vw + 3, 22, c.u, C_SEC);
+      txt(it, F, F.clock, x, 16, c.val, c.s == 'i' ? C_WARM : hc);
+      if (!c.u.empty()) txt(it, F, F.mid, x + vw + 3, 22, c.u, dimc(ac));
       txt(it, F, F.dest, x, 37, fit_words(F.dest, c.ti, 118 - x), C_WARM);
       split2(c.sub, a, b);
       txt(it, F, F.small, 190, 18, fit_words(F.small, a, 62), C_WARM, 2);
@@ -142,14 +144,15 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
     }
     case T_PROG: {
       int x = 26;
-      if (!c.ic.empty()) icon(it, 4, 13, c.ic.c_str(), 16, &C_WARM);
+      Color ac = c.s == 'i' ? accent(c) : hc;
+      if (!c.ic.empty()) icon(it, 4, 13, c.ic.c_str(), 16, &ac);
       else x = 4;
       int vw = text_w(F.big, c.val);
       txt(it, F, F.dest, x, 14, fit_words(F.dest, c.ti, 186 - vw - x - 6), hc);
       txt(it, F, F.big, 190, 13, c.val, C_WARM, 2);
-      seg_bar(it, x, 190, 32, 4, c.pct);
+      seg_bar(it, x, 190, 32, 4, c.pct, ac);
       split2(c.sub, a, b);
-      txt(it, F, F.small, x, 41, fit_words(F.small, a, 80), C_SEC);
+      txt(it, F, F.small, x, 41, fit_words(F.small, a, 80), dimc(ac, 90));
       txt(it, F, F.small, 190, 41, fit_words(F.small, b, 80), C_WARM, 2);
       break;
     }
@@ -160,7 +163,7 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
         const ListRow &r = c.rows[i];
         int y = 11 + i * pitch;
         Color vc = tokc(r.col);
-        Color icc = r.col == K_S ? C_WARM : vc;
+        Color icc = (r.col == K_W || r.col == K_S) ? accent(c) : vc;
         if (!r.ic.empty()) icon(it, 3, y + (dense ? 2 : 4), r.ic.c_str(), 7, &icc);
         bool big = !dense && numeric(r.val) && r.val.size() <= 4;
         Font *vf = dense ? F.small : big ? F.big : F.mid;
@@ -172,7 +175,7 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
       break;
     }
     case T_MSG: {
-      txt(it, F, F.dest, 4, 13, fit_words(F.dest, c.ti, 186), hc);
+      txt(it, F, F.dest, 4, 13, fit_words(F.dest, c.ti, 160), c.s == 'i' ? accent(c) : hc);
       std::vector<std::string> lines;
       wrap(F, F.mid, c.sub, 186, lines);
       int pages = std::max<int>(1, (lines.size() + 1) / 2);
@@ -181,7 +184,7 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
         size_t li = pg * 2 + i;
         if (li < lines.size()) txt(it, F, F.mid, 4, 31 + i * 12, lines[li], C_PAGER);
       }
-      if (pages > 1) meta = std::to_string(pg + 1) + "/" + std::to_string(pages);
+      if (pages > 1) txt(it, F, F.small, 191, 15, std::to_string(pg + 1) + "/" + std::to_string(pages), C_SEC, 2);
       break;
     }
     case T_KPI: {
@@ -190,15 +193,18 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
       for (int k = 0; k < (int) c.kpi.size(); k++) {
         const KpiCell &q = c.kpi[k];
         int x = k * cw + 3;
-        txt(it, F, F.small, x, 13, fit_words(F.small, q.label, cw - 6), C_SEC);
-        Color vc = tokc(q.col);
+        Color ca = cell_accent(c, q.col);
+        int lx = x;
+        if (!q.ic.empty()) { icon(it, x, 13, q.ic.c_str(), 7, &ca); lx = x + 9; }
+        txt(it, F, F.small, lx, 13, fit_words(F.small, q.label, cw - 6 - (lx - x)), ca);
+        Color vc = (q.col == K_W || q.col >= K_Y) ? C_WARM : tokc(q.col);
         int vw = text_w(F.clock, q.val);
         txt(it, F, F.clock, x, 23, q.val, vc);
-        if (!q.unit.empty()) txt(it, F, n == 3 ? F.small : F.mid, x + vw + 2, n == 3 ? 30 : 29, q.unit, C_SEC);
+        if (!q.unit.empty()) txt(it, F, n == 3 ? F.small : F.mid, x + vw + 2, n == 3 ? 30 : 29, q.unit, dimc(ca, 85));
         if (!q.sub.empty()) txt(it, F, F.tiny, x, 42, fit_words(F.tiny, q.sub, cw - 6), C_SEC);
         // every cell gets the same dim base line (consistent grid); a percentage fills it
         it.filled_rectangle(x, 50, cw - 8, 2, C_W4);
-        if (q.pct >= 0) it.filled_rectangle(x, 50, (cw - 8) * q.pct / 100, 2, vc);
+        if (q.pct >= 0) it.filled_rectangle(x, 50, std::max(2, (cw - 8) * q.pct / 100), 2, ca);
       }
       break;
     }
@@ -221,33 +227,36 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
       break;
     default: break;
   }
-  card_footer(it, F, c, meta);
+  (void) meta;  // the info line (pager) keeps running below every card (drawn by render())
 }
 
 // ------------------------------------------------------------------ panel templates (x128-191)
 static void panel_header(Display &it, const Fonts &F, const HaCard &c) {
   it.filled_rectangle(130, 1, 2, 7, tokc(c.tag));
-  txt(it, F, F.small, 134, 1, fit_words(F.small, c.ti, 57), sev_color(c));
+  txt(it, F, F.small, 134, 1, fit_words(F.small, c.ti, 57), c.s == 'i' ? accent(c) : sev_color(c));
 }
 
 static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms) {
   std::string a, b;
   Color hc = sev_color(c);
   switch (c.t) {
-    case T_HERO:
+    case T_HERO: {
       panel_header(it, F, c);
-      if (!c.ic.empty()) icon(it, 130, 12, c.ic.c_str(), 9, &hc);
-      txt(it, F, F.clock, 189, 22, c.val, hc, 2);
-      if (!c.u.empty()) txt(it, F, F.small, 189, 40, c.u, C_SEC, 2);
+      Color ac = c.s == 'i' ? accent(c) : hc;
+      if (!c.ic.empty()) icon(it, 130, 14, c.ic.c_str(), 16, &ac);
+      txt(it, F, F.clock, 189, 14, c.val, c.s == 'i' ? C_WARM : hc, 2);
+      if (!c.u.empty()) txt(it, F, F.small, 189, 30, c.u, dimc(ac, 85), 2);
       split2(c.sub, a, b);
-      txt(it, F, F.tiny, 130, 52, fit_words(F.tiny, a.empty() ? b : a, 60), C_SEC);
+      txt(it, F, F.tiny, 130, 41, fit_words(F.tiny, a, 60), C_SEC);
+      txt(it, F, F.tiny, 130, 48, fit_words(F.tiny, b, 60), C_SEC);
       break;
+    }
     case T_PROG:
       panel_header(it, F, c);
       txt(it, F, F.clock, 189, 14, c.val, C_WARM, 2);
-      seg_bar(it, 130, 189, 35, 4, c.pct);
+      seg_bar(it, 130, 189, 35, 4, c.pct, accent(c));
       split2(c.sub, a, b);
-      txt(it, F, F.tiny, 130, 44, fit_words(F.tiny, a, 60), C_SEC);
+      txt(it, F, F.tiny, 130, 44, fit_words(F.tiny, a, 60), dimc(accent(c), 90));
       txt(it, F, F.tiny, 130, 54, fit_words(F.tiny, b, 60), C_WARM);
       break;
     case T_LIST:
@@ -255,7 +264,7 @@ static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms
         const ListRow &r = c.rows[i];
         int y = 4 + i * 15;
         Color vc = tokc(r.col);
-        Color icc = r.col == K_S ? C_WARM : vc;
+        Color icc = (r.col == K_W || r.col == K_S) ? accent(c) : vc;
         if (!r.ic.empty()) icon(it, 130, y, r.ic.c_str(), 7, &icc);
         int vw = text_w(F.small, r.val);
         txt(it, F, F.small, 190, y, r.val, vc, 2);
@@ -278,12 +287,13 @@ static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms
       for (size_t k = 0; k < c.kpi.size() && k < 2; k++) {
         const KpiCell &q = c.kpi[k];
         int y = 2 + k * 32;
-        txt(it, F, F.tiny, 130, y, fit_words(F.tiny, q.label, 60), C_SEC);
+        Color ca = cell_accent(c, q.col);
+        txt(it, F, F.tiny, 130, y, fit_words(F.tiny, q.label, 60), ca);
         std::string v = q.val + (q.unit.size() <= 1 ? q.unit : "");
-        txt(it, F, F.big, 190, y + 9, v, tokc(q.col), 2);
-        if (q.unit.size() > 1) txt(it, F, F.tiny, 130, y + 14, q.unit, C_SEC);
+        txt(it, F, F.big, 190, y + 9, v, C_WARM, 2);
+        if (q.unit.size() > 1) txt(it, F, F.tiny, 130, y + 14, q.unit, dimc(ca, 85));
         it.filled_rectangle(130, y + 23, 60, 2, C_W4);
-        if (q.pct >= 0) it.filled_rectangle(130, y + 23, 60 * q.pct / 100, 2, tokc(q.col));
+        if (q.pct >= 0) it.filled_rectangle(130, y + 23, std::max(2, 60 * q.pct / 100), 2, ca);
       }
       break;
     case T_RING: {
@@ -314,15 +324,16 @@ static void panel_departures(Display &it, const Fonts &F, const Frame &fr, const
   if (t.is_valid()) {
     char buf[24];
     snprintf(buf, sizeof(buf), "%02d:%02d", t.hour, t.minute);
-    txt(it, F, F.mid, 1, 2, buf, C_WARM);
+    txt(it, F, F.small, 1, 1, buf, C_WARM);
     snprintf(buf, sizeof(buf), "%s %d.%d.", s.wd[t.day_of_week - 1], t.day_of_month, t.month);
-    txt(it, F, F.small, 36, 3, buf, C_SEC);
+    txt(it, F, F.small, 34, 1, buf, C_SEC);
   }
+  // 4 rows at 11 px (like the 4-row layout) leave y55-63 for the running info line
   size_t n = std::min<size_t>(fr.rows.size(), 4);
   for (size_t i = 0; i < n; i++) {
     const Row &r = fr.rows[i];
-    int y = 12 + i * 13;
-    badge(it, F, 1, y, r.line, 22, 11);
+    int y = 10 + i * 11;
+    badge(it, F, 1, y, r.line, 22, 10);
     int mr;
     if (r.mins.empty()) {
       std::string tt = empty_text(r);

@@ -22,9 +22,11 @@ enum CardTpl : uint8_t { T_HERO, T_PROG, T_LIST, T_MSG, T_KPI, T_RING, T_IMG, T_
 static const char *const TPL_NAMES[T_N] = {"hero", "prog", "list", "msg", "kpi", "ring", "img", "cv"};
 
 // Colour tokens (HA never sends hex): w s a r rc nv w2 w4 + tag names.
-enum Tok : uint8_t { K_W, K_S, K_A, K_R, K_RC, K_NV, K_W2, K_W4, K_CAL, K_COM, K_WX, K_DIS, K_ALR, K_NEWS, K_HA, K_N };
+// accent colours for cards: y yellow, g green, b blue, v violet (amber/red stay reserved for departures)
+enum Tok : uint8_t { K_W, K_S, K_A, K_R, K_RC, K_NV, K_W2, K_W4, K_CAL, K_COM, K_WX, K_DIS, K_ALR, K_NEWS, K_HA,
+                     K_Y, K_G, K_B, K_V, K_N };
 static const char *const TOK_NAMES[K_N] = {"w", "s", "a", "r", "rc", "nv", "w:2", "w:4",
-                                            "cal", "com", "wx", "dis", "alr", "news", "ha"};
+                                            "cal", "com", "wx", "dis", "alr", "news", "ha", "y", "g", "b", "v"};
 // Fonts (whitelist, never scaled)
 enum FontTok : uint8_t { FT_TINY, FT_SMALL, FT_MID, FT_DEST, FT_BIG, FT_CLOCK, FT_N };
 static const char *const FONT_NAMES[FT_N] = {"tiny", "small", "mid", "dest", "big", "clock"};
@@ -38,7 +40,7 @@ struct CardEl {      // canvas element: t text | n number | i icon | b chip | r 
   std::string s;     // text / icon name / image slot
 };
 struct ListRow { std::string ic, label, val; uint8_t col = K_W; };
-struct KpiCell { std::string label, val, unit, sub; uint8_t col = K_W; int pct = -1; };
+struct KpiCell { std::string label, val, unit, sub, ic; uint8_t col = K_W; int pct = -1; };
 
 struct HaCard {
   std::string id;
@@ -47,6 +49,7 @@ struct HaCard {
   uint8_t p = 2;             // 1 event, 2 state, 3 ambient (0 = alarm, routed to the model)
   char s = 'i';              // severity: i info | a attention | x alarm
   uint8_t tag = K_HA;
+  uint8_t ac = K_N;          // accent token (K_N = from the tag colour)
   uint32_t ttl = 0, hold = 15, expires = 0;
   uint32_t since_ms = 0;     // when the content last changed (p1 hold window)
   uint32_t at = 0;           // epoch of the last content change (shown on ring cards)
@@ -284,7 +287,9 @@ inline std::string card_json(const std::string &json) {
   std::string s = o["s"] | "i";
   c.s = (s == "a" || s == "x") ? s[0] : 'i';
   int tg = tok(o["tag"] | "ha", K_HA);
-  c.tag = tg >= K_CAL ? tg : K_HA;
+  c.tag = (tg >= K_CAL && tg <= K_HA) ? tg : K_HA;
+  int ac = tok(o["ac"] | "", K_N);
+  c.ac = ac < 0 ? K_N : ac;
   c.ttl = std::max(0, (int) (o["ttl"] | 0));
   c.hold = std::max(3, std::min(30, (int) (o["hold"] | 15)));
   c.ic = jstr(o["ic"], 16);
@@ -312,6 +317,7 @@ inline std::string card_json(const std::string &json) {
     kc.col = k < 0 ? K_W : k;
     kc.pct = r[4].is<int>() ? std::max(0, std::min(100, r[4].as<int>())) : -1;
     kc.sub = jstr(r[5], 16);
+    kc.ic = jstr(r[6], 16);
     c.kpi.push_back(kc);
   }
   for (JsonArrayConst e : o["el"].as<JsonArrayConst>()) {
