@@ -15,11 +15,12 @@
 #include "esphome/core/log.h"
 
 #include "perron_core.h"
+#include "perron_icons.h"
 
 namespace perron {
 
-enum CardTpl : uint8_t { T_HERO, T_PROG, T_LIST, T_MSG, T_KPI, T_RING, T_IMG, T_CV, T_N };
-static const char *const TPL_NAMES[T_N] = {"hero", "prog", "list", "msg", "kpi", "ring", "img", "cv"};
+enum CardTpl : uint8_t { T_HERO, T_PROG, T_LIST, T_MSG, T_KPI, T_RING, T_IMG, T_CV, T_AGENDA, T_N };
+static const char *const TPL_NAMES[T_N] = {"hero", "prog", "list", "msg", "kpi", "ring", "img", "cv", "agenda"};
 
 // Colour tokens (HA never sends hex): w s a r rc nv w2 w4 + tag names.
 // accent colours for cards: y yellow, g green, b blue, v violet (amber/red stay reserved for departures)
@@ -302,7 +303,7 @@ inline std::string card_json(const std::string &json) {
   c.pct = o["pct"].is<int>() ? std::max(0, std::min(100, o["pct"].as<int>())) : -1;
   c.fb = (o["fb"] | 0) != 0;
   for (JsonArrayConst r : o["rows"].as<JsonArrayConst>()) {
-    if (c.rows.size() >= 4) break;
+    if (c.rows.size() >= (c.t == T_AGENDA ? 8u : 4u)) break;
     ListRow lr;
     lr.ic = jstr(r[0], 16); lr.label = jstr(r[1], 24); lr.val = jstr(r[2], 8);
     int k = tok(r[3] | "w");
@@ -358,6 +359,19 @@ inline std::string card_json(const std::string &json) {
     ce.x &= ~1; ce.y &= ~1;  // 2 px grid
     c.el.push_back(ce);
   }
+  // unknown icon names are not an error (the card still shows), but the status says so
+  std::string unknown;
+  auto check_icon = [&](const std::string &n) {
+    if (n.empty()) return;
+    for (auto &i : ICONS7) if (n == i.name) return;
+    for (auto &i : ICONS16) if (n == i.name) return;
+    for (auto &i : ICONS9) if (n == i.name) return;
+    if (unknown.find(n) == std::string::npos) unknown += (unknown.empty() ? "" : ",") + n;
+  };
+  check_icon(c.ic);
+  for (auto &r : c.rows) check_icon(r.ic);
+  for (auto &k : c.kpi) check_icon(k.ic);
+  for (auto &e : c.el) if (e.t == 'i') check_icon(e.s);
   if (c.t == T_CV) {
     if (c.z == 'a') c.z = c.p == 1 ? 'f' : 'p';
     std::string err = validate_canvas(c);
@@ -386,7 +400,8 @@ inline std::string card_json(const std::string &json) {
     v.push_back(c);
   }
   cards_gen()++;
-  return card_status() = "Karte " + id + " (" + TPL_NAMES[c.t] + ") ok";
+  return card_status() = "Karte " + id + " (" + TPL_NAMES[c.t] + ") ok" +
+                         (unknown.empty() ? std::string() : ", Icon unbekannt: " + unknown);
 }
 
 // Effective zone: explicit f/p/l, or from prio (1 event: full screen for `hold`, then panel;
@@ -424,12 +439,13 @@ namespace perron {
 inline void card_demo() {
   static int i = 0;
   static const char *const demo[] = {
-      R"({"id":"demo","t":"prog","p":1,"hold":12,"ttl":60,"ic":"washer","ti":"Waschen","val":"42'","pct":63,"sub":"Spülen|fertig 14:49","ft":"Demo · Waschmaschine"})",
-      R"({"id":"demo","t":"kpi","p":1,"hold":12,"ttl":60,"ti":"Energie","kpi":[["PV jetzt","3.4","kW","w",-1,"Spitze 4.1"],["Heute","18.2","kWh","w",-1,"gestern 15.9"],["Akku","78","%","w",78,"voll 16:20"]],"ft":"Demo · Energie"})",
+      R"({"id":"demo","t":"prog","p":1,"hold":12,"ttl":60,"ac":"v","ic":"washer","ti":"Waschen","val":"42'","pct":63,"sub":"Spülen|fertig 14:49","ft":"Demo · Waschmaschine"})",
+      R"({"id":"demo","t":"kpi","p":1,"hold":12,"ttl":60,"ti":"Energie","kpi":[["PV jetzt","3.4","kW","y",-1,"Spitze 4.1","sun"],["Heute","18.2","kWh","y",-1,"gestern 15.9","sun"],["Akku","78","%","g",78,"voll 16:20","battery"]],"ft":"Demo · Energie"})",
       R"({"id":"demo","t":"list","p":1,"hold":12,"ttl":60,"ti":"Haus","rows":[["door","Terrassentür offen","12'","a"],["car","Auto lädt","64%","w"],["bell","Post eingeworfen","09:12","s"]],"ft":"Demo · Haus"})",
       R"({"id":"demo","t":"ring","p":1,"hold":12,"ttl":60,"ic":"bell","ti":"Haustür","sub":"Paket · DHL","ft":"Demo · Türklingel"})",
       R"({"id":"demo","t":"msg","p":1,"hold":12,"ttl":60,"tag":"cal","ti":"Müll morgen früh","sub":"Gelber Sack und Papier rausstellen, Abholung ab 06:00. Bitte auch den Glascontainer nicht vergessen.","ft":"Demo · Kalender"})",
-      R"({"id":"demo","t":"hero","p":1,"hold":12,"ttl":60,"ic":"car","ti":"Büro","val":"23","u":"min","sub":"via Ring|+4 Stau","ft":"Demo · Fahrzeit"})",
+      R"({"id":"demo","t":"hero","p":1,"hold":12,"ttl":60,"ac":"b","ic":"car","ti":"Büro","val":"23","u":"min","sub":"via Ring|+4 Stau","ft":"Demo · Fahrzeit"})",
+      R"({"id":"demo","t":"agenda","p":1,"hold":12,"ttl":60,"ac":"g","ic":"cal","ti":"Heute","rows":[["cal","Obstmontag","ganzt.","s"],["clock","Zahnarzt","14:30","a"],["school","Elternabend","19:00","w"],["cake","Geburtstag Anna","20:00","w"]]})",
       R"({"id":"demo","t":"cv","p":1,"hold":12,"ttl":60,"el":[["i",4,14,"car",16,"w"],["t",26,14,"Auto","dest","w"],["n",26,30,"312","clock","w"],["t",58,38,"km","small","s"],["g",26,50,100,2,78,"w"],["t",128,16,"Ladeziel 90%","small","s"],["b",146,30,"+11 kW","nv"]],"ft":"Demo · Canvas"})",
   };
   card_json(demo[i % (sizeof(demo) / sizeof(demo[0]))]);
