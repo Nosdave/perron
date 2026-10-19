@@ -39,6 +39,10 @@ static const Icon ICONS16[] = {
   {"cal", 16, 16, "...W.......W....WWWWWWWWWWWWWWWWW..............WWWWWWWWWWWWWWWWWW..............WW.WW..WW..WW...WW.WW..WW..WW...WW..............WW.WW..WW..WW...WW.WW..WW..WW...WW..............WW.WW..WW.......WW.WW..WW.......WW..............WWWWWWWWWWWWWWWWW................"},
   {"clock", 16, 16, ".....WWWWWW........WW......WW.....W..........W...W.....W......W..W.....W......W.W......W.......WW......W.......WW......WWWW....WW..............WW..............W.W............W..W............W...W..........W.....WW......WW........WWWWWW....................."},
   {"home", 16, 16, ".......WW.............W..W...........W....W.........W......W.......W........W.....W..........W...W............W.WWWWWWWWWWWWWWWW.W............W..W..WWW...WWW.W..W..W.W...W.W.W..W..W.W...WWW.W..W..W.W.......W..W..W.W.......W..WWWWWWWWWWWWWW................."},
+  {"bus", 16, 16, "..WWWWWWWWWWWW...W............W..W.WWWWWWWWWW.W..W.W........W.W..W.W........W.W..W.W........W.W..W.WWWWWWWWWW.W..W............W..W............W..W.WW......WW.W..W.WW......WW.W..W............W..WWWWWWWWWWWWWW...WW........WW....WW........WW.................."},
+  {"school", 16, 16, ".......WWWWW...........W...............W...............W..............WWW............WWWWW..........WWWWWWW........WWWWWWWWW....WWWWWWWWWWWWWWWWW..............WW.WW..WW..WW...WW.WW..WW..WW...WW..............WW.WW..WWWW..WW.WW.WW..W..W..WW.WWWWWWWWWWWWWWWWW"},
+  {"tram", 16, 16, ".....WWWWWW............WW.........WWWWWWWWWWWW...W............W..W.WWWW..WWWW.W..W.W..W..W..W.W..W.WWWW..WWWW.W..W............W..W............W..W.WW......WW.W..W............W...WWWWWWWWWWWW.....WW......WW.....WW........WW...WW..........WW................."},
+  {"train", 16, 16, "....WWWWWWWW.......W........W.....W.WWWWWWWW.W....W.W......W.W....W.W......W.W....W.WWWWWWWW.W....W..........W....W.WW....WW.W....W.WW....WW.W....W..........W.....WWWWWWWWWW.......W......W.......W........W.....W..........W...W............W................."},
 };
 static const Icon ICONS9[] = {
   {"sunny", 9, 9, "....Y.....Y.....Y....OOO.....OYYYO..YYOYYYOYY..OYYYO.....OOO....Y.....Y.....Y...."},

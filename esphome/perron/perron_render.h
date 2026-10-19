@@ -190,6 +190,15 @@ template<size_t N> static const Icon *find_icon(const Icon (&tab)[N], const char
 
 static void icon(Display &it, int x, int y, const char *name, int size, const Color *tint = nullptr) {
   const Icon *ic = size == 16 ? find_icon(ICONS16, name) : size == 9 ? find_icon(ICONS9, name) : find_icon(ICONS7, name);
+  if (!ic && size == 16) {  // no 16 px version: draw the 7 px icon doubled (14x14, centred)
+    const Icon *s = find_icon(ICONS7, name);
+    if (!s) return;
+    int ox = x + (16 - s->w * 2) / 2, oy = y + 1;
+    for (int j = 0; j < s->h; j++)
+      for (int i = 0; i < s->w; i++)
+        if (s->px[j * s->w + i] != '.') it.filled_rectangle(ox + i * 2, oy + j * 2, 2, 2, tint ? *tint : Color(235, 235, 235));
+    return;
+  }
   if (!ic) return;
   for (int j = 0; j < ic->h; j++)
     for (int i = 0; i < ic->w; i++) {
