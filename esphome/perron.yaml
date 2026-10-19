@@ -78,6 +78,17 @@ update:
     source: https://nosdave.github.io/perron/firmware/manifest.json
     update_interval: 6h
 
+# Update-Prüfung auch kurz nach dem Start (nicht erst nach 6 h) – sobald WLAN und Uhrzeit stehen.
+interval:
+  - interval: 60s
+    startup_delay: 90s
+    then:
+      - lambda: |-
+          static bool done = false;
+          if (done || !wifi::global_wifi_component->is_connected() || !id(sntp_time).now().is_valid()) return;
+          done = true;
+          id(fw_update).update();
+
 wifi:
   # Keine Zugangsdaten hier: werden über Hotspot/Captive-Portal (oder USB/Improv) eingegeben
   # und bleiben bei Updates über WLAN erhalten.
