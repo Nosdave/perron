@@ -99,6 +99,26 @@ static std::string fit_cut(Font *f, const std::string &s, int w) {
   return utf8_sub(s, 0, n);
 }
 
+
+// Text in a box of w px: drawn as is when it fits, otherwise as a slow marquee (1 px per frame,
+// 1.25 s pause at the start) instead of being cut. align 2 = right-aligned when it fits.
+inline uint32_t &frame_no() { static uint32_t f = 0; return f; }
+static void txt_fit(Display &it, const Fonts &F, Font *f, int x, int y, const std::string &s, int w, Color c,
+                    int align = 0) {
+  if (s.empty() || w <= 0) return;
+  int tw = text_w(f, s);
+  if (tw <= w) {
+    txt(it, F, f, align == 2 ? x + w : align == 1 ? x + w / 2 : x, y, s, c, align);
+    return;
+  }
+  int over = tw - w + 4;
+  uint32_t t = frame_no() % (uint32_t) (over + 50);
+  int off = t < 25 ? 0 : std::min<int>(over, (int) t - 25);
+  it.start_clipping(esphome::display::Rect(x, y - 3, w, cap_h(f, F) + 7));
+  txt(it, F, f, x - off, y, s, c);
+  it.end_clipping();
+}
+
 static bool slot_ready(const std::string &key) {
   ImgSlot *s = slot(key, false);
   return s && s->ready;
@@ -157,10 +177,10 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
       int vw = text_w(F.clock, c.val);
       txt(it, F, F.clock, x, 16, c.val, c.s == 'i' ? C_WARM : hc);
       if (!c.u.empty()) txt(it, F, F.mid, x + vw + 3, 22, c.u, dimc(ac));
-      txt(it, F, F.dest, x, 37, fit_words(F.dest, c.ti, 118 - x), C_WARM);
+      txt_fit(it, F, F.dest, x, 37, c.ti, 118 - x, C_WARM);
       split2(c.sub, a, b);
-      txt(it, F, F.small, 190, 18, fit_words(F.small, a, 62), C_WARM, 2);
-      txt(it, F, F.small, 190, 30, fit_words(F.small, b, 62), C_SEC, 2);
+      txt_fit(it, F, F.small, 128, 18, a, 62, C_WARM, 2);
+      txt_fit(it, F, F.small, 128, 30, b, 62, C_SEC, 2);
       break;
     }
     case T_PROG: {
@@ -169,12 +189,12 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
       if (!c.ic.empty()) icon(it, 4, 13, c.ic.c_str(), 16, &ac);
       else x = 4;
       int vw = text_w(F.big, c.val);
-      txt(it, F, F.dest, x, 14, fit_words(F.dest, c.ti, 186 - vw - x - 6), hc);
+      txt_fit(it, F, F.dest, x, 14, c.ti, 186 - vw - x - 6, hc);
       txt(it, F, F.big, 190, 13, c.val, C_WARM, 2);
       seg_bar(it, x, 190, 32, 4, c.pct, ac);
       split2(c.sub, a, b);
-      txt(it, F, F.small, x, 41, fit_words(F.small, a, 80), dimc(ac, 90));
-      txt(it, F, F.small, 190, 41, fit_words(F.small, b, 80), C_WARM, 2);
+      txt_fit(it, F, F.small, x, 41, a, 80, dimc(ac, 90));
+      txt_fit(it, F, F.small, 110, 41, b, 80, C_WARM, 2);
       break;
     }
     case T_LIST: {
@@ -191,7 +211,7 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
         int vw = text_w(vf, r.val);
         txt(it, F, vf, 191, y + (dense ? 2 : big ? 2 : 4), r.val, vc, 2);
         Font *lf = dense ? F.small : F.mid;
-        txt(it, F, lf, 14, y + (dense ? 2 : 4), fit_cut(lf, r.label, 191 - vw - 6 - 14), C_WARM);
+        txt_fit(it, F, lf, 14, y + (dense ? 2 : 4), r.label, 191 - vw - 6 - 14, C_WARM);
       }
       break;
     }
@@ -199,7 +219,7 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
       Color tcol = c.s == 'i' ? accent(c) : hc;
       int tx = 4;
       if (!c.ic.empty()) { icon(it, 4, 12, c.ic.c_str(), 16, &tcol); tx = 24; }
-      txt(it, F, F.dest, tx, 13, fit_words(F.dest, c.ti, 164 - tx), tcol);
+      txt_fit(it, F, F.dest, tx, 13, c.ti, 164 - tx, tcol);
       std::vector<std::string> lines;
       wrap(F, F.mid, c.sub, 186, lines);
       int pages = std::max<int>(1, (lines.size() + 1) / 2);
@@ -220,12 +240,12 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
         Color ca = cell_accent(c, q.col);
         int lx = x;
         if (!q.ic.empty()) { icon(it, x, 13, q.ic.c_str(), 7, &ca); lx = x + 9; }
-        txt(it, F, F.small, lx, 13, fit_words(F.small, q.label, cw - 6 - (lx - x)), ca);
+        txt_fit(it, F, F.small, lx, 13, q.label, cw - 6 - (lx - x), ca);
         Color vc = (q.col == K_W || q.col >= K_Y) ? C_WARM : tokc(q.col);
         int vw = text_w(F.clock, q.val);
         txt(it, F, F.clock, x, 23, q.val, vc);
         if (!q.unit.empty()) txt(it, F, n == 3 ? F.small : F.mid, x + vw + 2, n == 3 ? 30 : 29, q.unit, dimc(ca, 85));
-        if (!q.sub.empty()) txt(it, F, F.tiny, x, 42, fit_words(F.tiny, q.sub, cw - 6), C_SEC);
+        if (!q.sub.empty()) txt_fit(it, F, F.tiny, x, 42, q.sub, cw - 6, C_SEC);
         // every cell gets the same dim base line (consistent grid); a percentage fills it
         it.filled_rectangle(x, 50, cw - 8, 2, C_W4);
         if (q.pct >= 0) it.filled_rectangle(x, 50, std::max(2, (cw - 8) * q.pct / 100), 2, ca);
@@ -236,10 +256,10 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
       Color tc = c.s == 'i' ? C_CATCH : hc;
       if (!c.img.empty() && slot_ready(c.img)) draw_slot(it, c.img, 1, 11, 60, 44, fit_of(c, 'l'), c.fy);
       else icon(it, 22, 25, c.ic.empty() ? "bell" : c.ic.c_str(), 16, &tc);
-      txt(it, F, F.dest, 66, 13, fit_words(F.dest, c.ti, 124), tc);
+      txt_fit(it, F, F.dest, 66, 13, c.ti, 124, tc);
       split2(c.sub, a, b);  // "klingelt|17:57": text | time line (default: time received)
-      txt(it, F, F.mid, 66, 31, fit_words(F.mid, a, 124), C_WARM);
-      if (!b.empty()) txt(it, F, F.small, 66, 45, fit_words(F.small, b, 124), C_SEC);
+      txt_fit(it, F, F.mid, 66, 31, a, 124, C_WARM);
+      if (!b.empty()) txt_fit(it, F, F.small, 66, 45, b, 124, C_SEC);
       else if (c.at) txt(it, F, F.small, 66, 45, hhmm(c.at), C_SEC);
       break;
     }
@@ -252,7 +272,7 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
       Color tcol = c.s == 'i' ? accent(c) : hc;
       int tx = 4;
       if (!c.ic.empty()) { icon(it, 4, 12, c.ic.c_str(), 7, &tcol); tx = 14; }
-      txt(it, F, F.small, tx, 12, fit_words(F.small, c.ti, 150), tcol);
+      txt_fit(it, F, F.small, tx, 12, c.ti, 150, tcol);
       agenda_rows(it, F, c, ms, 4, 190, 22, 11, 3, F.mid, 32);
       break;
     }
@@ -270,7 +290,7 @@ static void panel_header(Display &it, const Fonts &F, const HaCard &c, bool with
   int x = 134;
   if (with_icon && !c.ic.empty()) { icon(it, 130, 1, c.ic.c_str(), 7, &tc); x = 139; }
   else it.filled_rectangle(130, 1, 2, 7, tokc(c.tag));
-  txt(it, F, F.small, x, 1, fit_words(F.small, c.ti, 191 - x), tc);
+  txt_fit(it, F, F.small, x, 1, c.ti, 191 - x, tc);
 }
 
 // Agenda rows: time column + (optional) icon + text; the row colour marks now / next.
@@ -284,14 +304,14 @@ static void agenda_rows(Display &it, const Fonts &F, const HaCard &c, uint32_t m
     const ListRow &r = c.rows[k];
     int y = y0 + i * pitch;
     Color tc = r.col == K_W ? C_WARM : tokc(r.col);
-    txt(it, F, f, x0, y, fit_cut(f, r.val, time_w), r.col == K_S ? C_SEC : tc);
+    txt_fit(it, F, f, x0, y, r.val, time_w, r.col == K_S ? C_SEC : tc);
     int x = x0 + time_w + 3;
     if (!r.ic.empty() && f != F.tiny) {
       Color icc = r.col == K_W || r.col == K_S ? accent(c) : tc;
       icon(it, x, y + cap_h(f, F) - 7, r.ic.c_str(), 7, &icc);
       x += 9;
     }
-    txt(it, F, f, x, y, fit_cut(f, r.label, x1 - x), r.col == K_S ? C_SEC : C_WARM);
+    txt_fit(it, F, f, x, y, r.label, x1 - x, r.col == K_S ? C_SEC : C_WARM);
   }
   // page counter in the header line (never on top of the info line at the bottom)
   if (pages > 1) txt(it, F, F.tiny, x1, y0 - (f == F.tiny ? 10 : 9), std::to_string(pg + 1) + "/" + std::to_string(pages), C_SEC, 2);
@@ -304,12 +324,18 @@ static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms
     case T_HERO: {
       panel_header(it, F, c);
       Color ac = c.s == 'i' ? accent(c) : hc;
-      if (!c.ic.empty()) icon(it, 130, 14, c.ic.c_str(), 16, &ac);
-      txt(it, F, F.clock, 189, 14, c.val, c.s == 'i' ? C_WARM : hc, 2);
+      // value right-aligned; keep the 16 px icon clear of it (smaller font, else drop the icon)
+      bool ic_on = !c.ic.empty();
+      Font *vf = F.clock;
+      int avail = 60 - (ic_on ? 19 : 0);
+      if (text_w(vf, c.val) > avail) vf = F.big;
+      if (text_w(vf, c.val) > avail && ic_on) { ic_on = false; avail = 60; vf = text_w(F.clock, c.val) <= 60 ? F.clock : F.big; }
+      if (ic_on) icon(it, 130, 14, c.ic.c_str(), 16, &ac);
+      txt(it, F, vf, 189, vf == F.clock ? 14 : 16, c.val, c.s == 'i' ? C_WARM : hc, 2);
       if (!c.u.empty()) txt(it, F, F.small, 189, 30, c.u, dimc(ac, 85), 2);
       split2(c.sub, a, b);
-      txt(it, F, F.tiny, 130, 41, fit_words(F.tiny, a, 60), C_SEC);
-      txt(it, F, F.tiny, 130, 48, fit_words(F.tiny, b, 60), C_SEC);
+      txt_fit(it, F, F.tiny, 130, 41, a, 60, C_SEC);
+      txt_fit(it, F, F.tiny, 130, 48, b, 60, C_SEC);
       break;
     }
     case T_PROG:
@@ -317,8 +343,8 @@ static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms
       txt(it, F, F.clock, 189, 14, c.val, C_WARM, 2);
       seg_bar(it, 130, 189, 35, 4, c.pct, accent(c));
       split2(c.sub, a, b);
-      txt(it, F, F.tiny, 130, 44, fit_words(F.tiny, a, 60), dimc(accent(c), 90));
-      txt(it, F, F.tiny, 130, 54, fit_words(F.tiny, b, 60), C_WARM);
+      txt_fit(it, F, F.tiny, 130, 44, a, 60, dimc(accent(c), 90));
+      txt_fit(it, F, F.tiny, 130, 54, b, 60, C_WARM);
       break;
     case T_LIST: {
       bool head = !c.ti.empty();
@@ -331,7 +357,7 @@ static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms
         if (!r.ic.empty()) icon(it, 130, y, r.ic.c_str(), 7, &icc);
         int vw = text_w(F.small, r.val);
         txt(it, F, F.small, 190, y, r.val, vc, 2);
-        txt(it, F, F.tiny, 139, y + 1, fit_cut(F.tiny, r.label, 190 - vw - 3 - 139), C_WARM);
+        txt_fit(it, F, F.tiny, 139, y + 1, r.label, 190 - vw - 3 - 139, C_WARM);
       }
       break;
     }
@@ -356,7 +382,7 @@ static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms
         const KpiCell &q = c.kpi[k];
         int y = 2 + k * 32;
         Color ca = cell_accent(c, q.col);
-        txt(it, F, F.tiny, 130, y, fit_words(F.tiny, q.label, 60), ca);
+        txt_fit(it, F, F.tiny, 130, y, q.label, 60, ca);
         std::string v = q.val + (q.unit.size() <= 1 ? q.unit : "");
         txt(it, F, F.big, 190, y + 9, v, C_WARM, 2);
         if (q.unit.size() > 1) txt(it, F, F.tiny, 130, y + 14, q.unit, dimc(ca, 85));
@@ -368,9 +394,9 @@ static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms
       Color tc = c.s == 'i' ? C_CATCH : hc;
       if (!c.img.empty() && slot_ready(c.img)) draw_slot(it, c.img, 128, 0, 64, 44, fit_of(c, 'l'), c.fy);
       else icon(it, 152, 10, c.ic.empty() ? "bell" : c.ic.c_str(), 16, &tc);
-      txt(it, F, F.small, 160, 46, fit_words(F.small, c.ti, 60), tc, 1);
+      txt_fit(it, F, F.small, 130, 46, c.ti, 60, tc, 1);
       split2(c.sub, a, b);
-      if (!b.empty()) txt(it, F, F.tiny, 160, 56, fit_words(F.tiny, b, 60), C_SEC, 1);
+      if (!b.empty()) txt_fit(it, F, F.tiny, 130, 56, b, 60, C_SEC, 1);
       else if (c.at) txt(it, F, F.tiny, 160, 56, hhmm(c.at), C_SEC, 1);
       break;
     }
@@ -378,7 +404,7 @@ static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms
       if (c.ft.empty()) draw_slot(it, c.img, 128, 0, 64, 55, fit_of(c, 'c'), c.fy);
       else {
         draw_slot(it, c.img, 128, 0, 64, 55, fit_of(c, 'c'), c.fy);
-        txt(it, F, F.tiny, 130, 57, fit_words(F.tiny, c.ft, 60), C_SEC);
+        txt_fit(it, F, F.tiny, 130, 57, c.ft, 60, C_SEC);
       }
       break;
     case T_CV:

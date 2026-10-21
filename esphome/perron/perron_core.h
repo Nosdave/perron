@@ -125,6 +125,7 @@ inline SemaphoreHandle_t &mtx() { static SemaphoreHandle_t m = xSemaphoreCreateM
 inline Config &cfg_storage() { static Config c; return c; }
 inline bool &cfg_dirty() { static bool d = true; return d; }
 inline Model &model_storage() { static Model m; return m; }
+inline float &applied_brightness_pct() { static float p = NAN; return p; }
 
 struct Lock {
   Lock() { xSemaphoreTake(mtx(), portMAX_DELAY); }

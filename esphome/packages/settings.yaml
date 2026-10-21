@@ -448,14 +448,15 @@ interval:
           perron::start();
 
           // Helligkeit: Nachtfenster -> "Helligkeit Nacht". Tagsüber mit Lichtsensor logarithmisch
-          // zwischen "Helligkeit Nacht" (dunkel, <1 lx) und "Helligkeit" (hell, >=300 lx), geglättet.
+          // zwischen "Helligkeit Nacht" (dunkel, <1 lx) und "Helligkeit" (ab "Volle Helligkeit ab", Std. 300 lx), geglättet.
           bool night = perron::in_night(L, id(sntp_time).now());
           float b_lo = id(cfg_brightness_night).state, b_hi = id(cfg_brightness).state;
           float target = night ? b_lo : b_hi;
           if (!night && id(sw_auto_bright).state && id(ambient_lux).has_state() && !std::isnan(id(ambient_lux).state)) {
             // Sensor sitzt hinter der getönten Frontscheibe -> auf Raumhelligkeit hochrechnen
             float lux = std::max(0.0f, id(ambient_lux).state) * 100.0f / std::max(5.0f, id(cfg_glass).state);
-            float k = std::min(1.0f, std::log10(lux + 1.0f) / std::log10(301.0f));
+            float full = std::max(20.0f, id(cfg_lux_full).state);
+            float k = std::min(1.0f, std::log10(lux + 1.0f) / std::log10(full + 1.0f));
             target = b_lo + (b_hi - b_lo) * k;
           }
           static float smooth = -1;
@@ -463,6 +464,7 @@ interval:
           static int last_b = -1;
           int b = (int) lroundf(smooth);
           if (abs(b - last_b) >= 2 || (last_b != b && (b <= 10 || night))) { id(matrix).set_brightness(b); last_b = b; }
+          perron::applied_brightness_pct() = b * 100.0f / 255.0f;
 
   # Automatische Updates: nur nachts zwischen 03:00 und 05:00, wenn eine neue Version bereitsteht.
   - interval: 15min
