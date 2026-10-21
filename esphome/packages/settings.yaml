@@ -231,27 +231,72 @@ select:
     entity_category: config
 
 number:
+  # Helligkeit = Kurve über die Raumhelligkeit (Stützpunkte bei 1/10/100/1000 lx, dazwischen
+  # logarithmisch interpoliert). Alle Einträge beginnen mit "Helligkeit" -> stehen in HA zusammen.
   - platform: template
-    id: cfg_brightness
-    name: "Helligkeit"
-    icon: mdi:brightness-6
-    min_value: 5
-    max_value: 255
-    step: 5
+    id: cfg_b1
+    name: "Helligkeit bei 1 lx (dunkel)"
+    icon: mdi:brightness-1
+    unit_of_measurement: "%"
+    min_value: 1
+    max_value: 100
+    step: 1
+    mode: slider
     optimistic: true
     restore_value: true
-    initial_value: 60
+    initial_value: 4
+    entity_category: config
+  - platform: template
+    id: cfg_b10
+    name: "Helligkeit bei 10 lx (dämmrig)"
+    icon: mdi:brightness-3
+    unit_of_measurement: "%"
+    min_value: 1
+    max_value: 100
+    step: 1
+    mode: slider
+    optimistic: true
+    restore_value: true
+    initial_value: 20
+    entity_category: config
+  - platform: template
+    id: cfg_b100
+    name: "Helligkeit bei 100 lx (Raumlicht)"
+    icon: mdi:brightness-5
+    unit_of_measurement: "%"
+    min_value: 1
+    max_value: 100
+    step: 1
+    mode: slider
+    optimistic: true
+    restore_value: true
+    initial_value: 50
+    entity_category: config
+  - platform: template
+    id: cfg_b1000
+    name: "Helligkeit bei 1000 lx (Tageslicht)"
+    icon: mdi:brightness-7
+    unit_of_measurement: "%"
+    min_value: 1
+    max_value: 100
+    step: 1
+    mode: slider
+    optimistic: true
+    restore_value: true
+    initial_value: 100
     entity_category: config
   - platform: template
     id: cfg_brightness_night
-    name: "Helligkeit Nacht"
-    icon: mdi:brightness-4
-    min_value: 2
-    max_value: 120
+    name: "Helligkeit Nachtzeit"
+    icon: mdi:weather-night
+    unit_of_measurement: "%"
+    min_value: 1
+    max_value: 50
     step: 1
+    mode: slider
     optimistic: true
     restore_value: true
-    initial_value: 8
+    initial_value: 3
     entity_category: config
   - platform: template
     id: cfg_walk
@@ -447,18 +492,20 @@ interval:
           L.version++;
           perron::start();
 
-          // Helligkeit: Nachtfenster -> "Helligkeit Nacht". Tagsüber mit Lichtsensor logarithmisch
-          // zwischen "Helligkeit Nacht" (dunkel, <1 lx) und "Helligkeit" (ab "Volle Helligkeit ab", Std. 300 lx), geglättet.
+          // Helligkeit (Prozent): im Nachtfenster "Helligkeit Nachtzeit"; sonst mit Lichtsensor die Kurve
+          // über die Raumhelligkeit (Stützpunkte 1/10/100/1000 lx, log-interpoliert); ohne Sensor oder
+          // ohne Automatik gilt der Raumlicht-Wert (100 lx).
           bool night = perron::in_night(L, id(sntp_time).now());
-          float b_lo = id(cfg_brightness_night).state, b_hi = id(cfg_brightness).state;
-          float target = night ? b_lo : b_hi;
+          const float pts[4] = {id(cfg_b1).state, id(cfg_b10).state, id(cfg_b100).state, id(cfg_b1000).state};
+          float pct = night ? id(cfg_brightness_night).state : pts[2];
           if (!night && id(sw_auto_bright).state && id(ambient_lux).has_state() && !std::isnan(id(ambient_lux).state)) {
             // Sensor sitzt hinter der getönten Frontscheibe -> auf Raumhelligkeit hochrechnen
             float lux = std::max(0.0f, id(ambient_lux).state) * 100.0f / std::max(5.0f, id(cfg_glass).state);
-            float full = std::max(20.0f, id(cfg_lux_full).state);
-            float k = std::min(1.0f, std::log10(lux + 1.0f) / std::log10(full + 1.0f));
-            target = b_lo + (b_hi - b_lo) * k;
+            float x = std::min(3.0f, std::max(0.0f, std::log10(std::max(lux, 1.0f))));
+            int i = std::min(2, (int) x);
+            pct = pts[i] + (pts[i + 1] - pts[i]) * (x - i);
           }
+          float target = std::max(1.0f, pct * 2.55f);
           static float smooth = -1;
           smooth = smooth < 0 ? target : smooth + (target - smooth) * 0.35f;
           static int last_b = -1;

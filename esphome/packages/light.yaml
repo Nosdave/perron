@@ -24,7 +24,7 @@ sensor:
   # fuer Home Assistant: hoechstens alle 30 s und nur bei spuerbarer Aenderung (Recorder schonen)
   - platform: copy
     source_id: ambient_lux
-    name: "Umgebungslicht"
+    name: "Helligkeit Umgebung"
     unit_of_measurement: "lx"
     device_class: illuminance
     accuracy_decimals: 1
@@ -36,7 +36,7 @@ sensor:
   # was die Tafel gerade einstellt (0-100 %), zum Nachjustieren der Kurve
   - platform: template
     id: applied_brightness
-    name: "Aktuelle Helligkeit"
+    name: "Helligkeit aktuell"
     icon: mdi:brightness-percent
     unit_of_measurement: "%"
     accuracy_decimals: 0
@@ -46,10 +46,18 @@ sensor:
     filters:
       - delta: 2
 
+  # Chip-Temperatur des ESP32-S3 (grob, liegt über der Raumtemperatur) – für Gehäuse/Lüfter-Entscheidung
+  - platform: internal_temperature
+    name: "Temperatur ESP"
+    entity_category: diagnostic
+    update_interval: 60s
+    filters:
+      - delta: 1.0
+
 switch:
   - platform: template
     id: sw_auto_bright
-    name: "Automatische Helligkeit"
+    name: "Helligkeit automatisch"
     icon: mdi:brightness-auto
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
@@ -57,21 +65,8 @@ switch:
 
 number:
   - platform: template
-    id: cfg_lux_full
-    name: "Volle Helligkeit ab"
-    icon: mdi:white-balance-sunny
-    unit_of_measurement: "lx"
-    min_value: 20
-    max_value: 2000
-    step: 10
-    mode: box
-    optimistic: true
-    restore_value: true
-    initial_value: 300   # Raumhelligkeit, ab der die Tafel "Helligkeit" (voll) nutzt
-    entity_category: config
-  - platform: template
     id: cfg_glass
-    name: "Frontscheibe Lichtdurchlass"
+    name: "Helligkeit Frontscheibe"
     icon: mdi:mirror
     unit_of_measurement: "%"
     min_value: 5
