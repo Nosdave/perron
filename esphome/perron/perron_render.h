@@ -734,11 +734,12 @@ static void status_bar(Display &it, const Fonts &F, const Model &m, const Look &
   if (m.wx.valid && !stale_src(m, SRC_WX, now, 3600)) {  // mockup: icon x=150, range right-aligned at 140
     snprintf(buf, sizeof(buf), "%d°", m.wx.temp);
     txt(it, F, F.mid, 191, 2, buf, C_WARM, 2);
-    icon(it, 150, 1, ww_condition(m.wx.ww, m.wx.night), 9);
+    int ix = std::min(150, 191 - text_w(F.mid, buf) - 12);  // never touching the temperature
+    icon(it, ix, 1, ww_condition(m.wx.ww, m.wx.night), 9);
     if (m.wx.has_min && m.wx.has_max) {
       if (m.wx.tmin < 0) snprintf(buf, sizeof(buf), "%d / %d°", m.wx.tmin, m.wx.tmax);
       else snprintf(buf, sizeof(buf), "%d-%d°", m.wx.tmin, m.wx.tmax);
-      txt(it, F, F.small, 140, 3, buf, C_SEC, 2);
+      txt(it, F, F.small, ix - 4, 3, buf, C_SEC, 2);
     }
   }
 }
@@ -923,10 +924,10 @@ static void status_slim(Display &it, const Fonts &F, const Model &m, const Look 
   }
   if (alert_dot) it.filled_rectangle(95, 2, 3, 3, C_LEAVE);
   if (m.wx.valid && !stale_src(m, SRC_WX, now, 3600)) {
-    icon(it, 130, 0, ww_condition(m.wx.ww, m.wx.night), 9);
     if (m.wx.has_min && m.wx.has_max) snprintf(buf, sizeof(buf), "%d°  %d/%d°", m.wx.temp, m.wx.tmin, m.wx.tmax);
     else snprintf(buf, sizeof(buf), "%d°", m.wx.temp);
     txt(it, F, F.small, 191, 1, buf, C_WARM, 2);
+    icon(it, 191 - text_w(F.small, buf) - 12, 0, ww_condition(m.wx.ww, m.wx.night), 9);  // 3 px gap
   }
 }
 
@@ -1068,6 +1069,7 @@ static void render(Display &it, const Fonts &F, const Look &L, const esphome::ES
     p0_last.clear();
   }
 
+  frame_no()++;  // drives text marquees (1 px per frame)
   // Home Assistant cards (JSON templates / canvas / images)
   static uint32_t last_exp_s = 0;
   if (ms / 1000 != last_exp_s) { last_exp_s = ms / 1000; expire_cards(now); }

@@ -15,11 +15,36 @@ sensor:
     glass_attenuation_factor: 1.0
     ambient_light:
       id: ambient_lux
-      name: "Umgebungslicht"
+      name: "Umgebungslicht roh"
+      internal: true            # intern alle 5 s fuer die Regelung; HA bekommt den gedrosselten Wert unten
       filters:
         - sliding_window_moving_average:
             window_size: 6
             send_every: 1
+  # fuer Home Assistant: hoechstens alle 30 s und nur bei spuerbarer Aenderung (Recorder schonen)
+  - platform: copy
+    source_id: ambient_lux
+    name: "Umgebungslicht"
+    unit_of_measurement: "lx"
+    device_class: illuminance
+    accuracy_decimals: 1
+    filters:
+      - or:
+          - throttle_with_priority: 300s
+          - delta: 15%
+      - throttle: 30s
+  # was die Tafel gerade einstellt (0-100 %), zum Nachjustieren der Kurve
+  - platform: template
+    id: applied_brightness
+    name: "Aktuelle Helligkeit"
+    icon: mdi:brightness-percent
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: 'return perron::applied_brightness_pct();'
+    filters:
+      - delta: 2
 
 switch:
   - platform: template
@@ -31,6 +56,19 @@ switch:
     entity_category: config
 
 number:
+  - platform: template
+    id: cfg_lux_full
+    name: "Volle Helligkeit ab"
+    icon: mdi:white-balance-sunny
+    unit_of_measurement: "lx"
+    min_value: 20
+    max_value: 2000
+    step: 10
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 300   # Raumhelligkeit, ab der die Tafel "Helligkeit" (voll) nutzt
+    entity_category: config
   - platform: template
     id: cfg_glass
     name: "Frontscheibe Lichtdurchlass"
