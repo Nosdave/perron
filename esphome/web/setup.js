@@ -14,10 +14,11 @@
     loc: T("Standort"), nsrc: T("Nachrichtenquellen"), dfilter: T("Zielfilter"), alias: T("Kurznamen"), night: T("Nachtzeit"), free: T("Freitext"),
     layout: SEL("Layout"), lang: SEL("Sprache"), nmode: SEL("Nachtmodus"),
     badges: SEL("Helle Linien"), scroll: SEL("Laufschrift"),
-    bright: N("Helligkeit"), nbright: N("Helligkeit Nacht"), glass: N("Frontscheibe Lichtdurchlass"), luxfull: N("Volle Helligkeit ab"), walk: N("Gehzeit zur Haltestelle"), wtrain: N("Gehzeit zum Bahnhof"),
+    b1: N("Helligkeit bei 1 lx (dunkel)"), b10: N("Helligkeit bei 10 lx (dämmrig)"), b100: N("Helligkeit bei 100 lx (Raumlicht)"),
+    b1000: N("Helligkeit bei 1000 lx (Tageslicht)"), nbright: N("Helligkeit Nachtzeit"), glass: N("Helligkeit Frontscheibe"), walk: N("Gehzeit zur Haltestelle"), wtrain: N("Gehzeit zum Bahnhof"),
     horizon: N("Vorschau"), dwell: N("Infozeile Wechsel"),
     wx: SW("Wetter (KMI)"), bea: SW("BE-Alert"), disr: SW("STIB-Störungen"), news: SW("Schlagzeilen"),
-    second: SW("Zweite Abfahrt"), showwalk: SW("Gehzeit anzeigen"), pintrain: SW("Zug immer anzeigen"), sncblogo: SW("SNCB-Logo beim Zug"), autoup: SW("Automatische Updates"), autob: SW("Automatische Helligkeit"), status: SW("Statusleiste"), pager: SW("Infozeile"), freeon: SW("Freitext anzeigen"),
+    second: SW("Zweite Abfahrt"), showwalk: SW("Gehzeit anzeigen"), pintrain: SW("Zug immer anzeigen"), sncblogo: SW("SNCB-Logo beim Zug"), autoup: SW("Automatische Updates"), autob: SW("Helligkeit automatisch"), status: SW("Statusleiste"), pager: SW("Infozeile"), freeon: SW("Freitext anzeigen"),
   };
   const enc = encodeURIComponent;
   const url = ([d, n]) => `/${d}/${enc(n)}`;
@@ -50,6 +51,26 @@
       state[k] = e[0] === "switch" ? j.value === true || j.state === "ON" : (j.value ?? j.state ?? "");
       if (e[0] === "select") state[k + "_opts"] = j.option || [];
     }));
+  }
+
+  // ---- brightness: curve over the room light, all in one place, with a live readout
+  function brightnessGroup() {
+    const live = h("b", {}, "…");
+    const tick = async () => {
+      const u = await get(["sensor", "Helligkeit Umgebung"]), a = await get(["sensor", "Helligkeit aktuell"]);
+      live.textContent = `${u.state ?? "–"} → ${a.state ?? "–"}`;
+    };
+    tick(); const iv = setInterval(() => { if (!document.body.contains(live)) clearInterval(iv); else tick(); }, 5000);
+    return h("div", { class: "grp-box" },
+      h("div", { class: "grp" }, "Helligkeit"),
+      h("p", { class: "hint" }, "Jetzt: ", live, " – Raumhelligkeit (Lichtsensor) → Helligkeit der Tafel"),
+      toggle("Automatisch nach Umgebungslicht", "autob", "Aus: die Tafel nutzt den Raumlicht-Wert (100 lx)."),
+      range("bei 1 lx (dunkel)", "b1", 1, 100, 1, " %"),
+      range("bei 10 lx (dämmrig)", "b10", 1, 100, 1, " %"),
+      range("bei 100 lx (Raumlicht)", "b100", 1, 100, 1, " %"),
+      range("bei 1000 lx (Tageslicht)", "b1000", 1, 100, 1, " %"),
+      range("in der Nachtzeit", "nbright", 1, 50, 1, " %"),
+      range("Frontscheibe Lichtdurchlass (Sensor-Korrektur)", "glass", 5, 100, 1, " %"));
   }
 
   // ---- news sources (codes must match NEWS_SOURCES in perron_core.h) ----
@@ -190,16 +211,12 @@
     ] },
     { t: "Darstellung", b: () => [
       choice("Layout", "layout"), choice("Helle Linien", "badges"), choice("Laufschrift", "scroll"), choice("Sprache", "lang"),
-      toggle("Automatische Helligkeit", "autob", "Mit Lichtsensor (VEML7700): regelt zwischen Nacht- und Tageshelligkeit."),
-      range("Helligkeit (maximal)", "bright", 5, 255, 5, ""),
-      range("Frontscheibe Lichtdurchlass (Lichtsensor-Korrektur)", "glass", 5, 100, 1, " %"),
-      range("Volle Helligkeit ab (Raumhelligkeit)", "luxfull", 20, 2000, 10, " lx"),
+      brightnessGroup(),
       toggle("Zweite Abfahrt anzeigen", "second"), toggle("Gehzeit anzeigen (Symbol + Minuten)", "showwalk"), toggle("Statusleiste (Uhr, Wetter)", "status"),
       toggle("Infozeile (Störungen, Termine, Wetter …)", "pager"),
       range("Infozeile wechselt alle", "dwell", 3, 15, 1, " s"),
       range("Abfahrten anzeigen bis", "horizon", 15, 95, 5, " min"),
       choice("Nachtmodus", "nmode"), field("Nachtzeit", "night", { ph: "23:00-06:00" }),
-      range("Helligkeit nachts", "nbright", 2, 120, 1, ""),
       field("Kurznamen", "alias", { ph: "Gare du Midi=Midi;Gare du Nord=Nord", hint: "Lange Ziele kürzen: Original=Kurz, mit ; getrennt." }),
     ] },
     { t: "Status", b: () => {
