@@ -177,7 +177,7 @@
     const picked = [...sel.values()].flatMap(s => [...s]);          // "line|dest"
     const lines = [...new Set(picked.map(k => k.split("|")[0]))];
     // Destination filter: only for lines where the user left out a direction the selected
-    // platforms also serve (e.g. 60 -> Delta but not -> De Brouckère). Keyword = longest
+    // platforms also serve (e.g. 71 -> Delta but not -> De Brouckère). Keyword = longest
     // word of the headsign; the board matches it case-insensitively inside the live destination.
     const keyword = (d) => d.split(/[\s\/]+/).filter(w => !/^(via|place|gare|porte|de|du|la|le|st|ste)$/i.test(w))
                            .sort((a, b) => b.length - a.length)[0] || d;

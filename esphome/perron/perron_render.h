@@ -301,6 +301,7 @@ struct Frame {
   std::string p0_title, p0_body;
   std::vector<std::string> p0_lines;
   bool train_stale = false, stib_stale = false, any_data = false;
+  std::vector<HaCard> pt;        // routed commutes as panel cards (rebuilt with the frame)
 };
 inline Frame &frame() { static Frame f; return f; }
 
@@ -564,11 +565,12 @@ static void build_pager(Frame &fr, const Look &L, const Fonts &F, uint32_t now) 
     snprintf(b, sizeof(b), s.rain_in, m.wx.rain_in_h);  // beyond the radar window: hourly forecast
     v.push_back({TAG_WX, b, 2, "w:rain", 0});
   }
-  if (m.commute_dep && now && m.commute_dep > now && !stale_src(m, SRC_COMMUTE, now, 1200)) {
-    char b[64];
-    int total = (int) ((m.commute_dep - now) + m.commute_dur_s) / 60;
-    snprintf(b, sizeof(b), "%s: %d min (%s)", s.work, total, s.train);
-    v.push_back({TAG_COMMUTE, b, 2, "pt", 0});
+  for (int i = 0; i < 2; i++) {  // routed commutes: "Büro 33' · los 07:41 · 92 > M2 > M1"
+    const auto &cm = m.cm[i];
+    if (!cm.active || stale_src(m, SRC_COMMUTE, now, 1200) || (now && cm.leave + 60 < now)) continue;
+    std::string t = cm.name + " " + std::to_string(cm.dur_min) + "' · los " + hhmm(cm.leave);
+    for (size_t k = 0; k < cm.lines.size(); k++) t += (k ? " > " : " · ") + cm.lines[k];
+    v.push_back({TAG_COMMUTE, t, 2, "pt" + std::to_string(i), 0});
   }
   if (L.free_on && !L.free_text.empty()) v.push_back({TAG_HA, led_safe(L.free_text), 3, "free", 0});
   // headlines: 4 per cycle from the interleaved sources, rotating every 5 min
@@ -628,6 +630,18 @@ static void refresh_frame(const Fonts &F, const Look &L, uint32_t now) {
   (void) vy0; (void) vbottom;
   build_rows(fr, L, now);
   build_pager(fr, L, F, now);
+  fr.pt.clear();
+  for (int i = 0; i < 2; i++) {
+    const auto &cm = fr.m.cm[i];
+    if (!cm.active || stale_src(fr.m, SRC_COMMUTE, now, 1200) || (now && cm.leave + 60 < now)) continue;
+    HaCard c;
+    c.id = "pt" + std::to_string(i); c.t = T_COMMUTE; c.p = 2; c.z = 'p'; c.tag = K_COM; c.ac = K_B;
+    c.ti = cm.name; c.val = std::to_string(cm.dur_min); c.u = "min";
+    c.sub = hhmm(cm.leave) + "|" + hhmm(cm.arrive);
+    c.at = cm.leave;
+    for (auto &ln : cm.lines) { ListRow r; r.label = ln; c.rows.push_back(r); }
+    fr.pt.push_back(c);
+  }
   // P0 takeover: BE-Alert, HA critical, or KMI orange/red (fresh data only)
   std::string title, body;
   for (auto &a : fr.m.alerts) {

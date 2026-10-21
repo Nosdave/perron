@@ -37,3 +37,4 @@ select:focus{outline:2px solid var(--acc);outline-offset:1px}
 option{background:#18181c;color:#ffe9cc}
 .srcs{margin:4px 0 8px 34px}.srcs .grp{color:var(--sec);font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin:10px 0 2px}.srcs label.t{margin:6px 0}
 .grp-box{border:1px solid var(--line);border-radius:12px;padding:6px 12px 2px;margin:12px 0}.grp-box .grp{color:var(--acc);font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin:6px 0 0}
+.results{display:flex;flex-direction:column;gap:4px;margin-top:6px}.results .res{text-align:left;padding:8px 12px;font-size:14px}

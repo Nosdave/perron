@@ -20,8 +20,8 @@
 
 namespace perron {
 
-enum CardTpl : uint8_t { T_HERO, T_PROG, T_LIST, T_MSG, T_KPI, T_RING, T_IMG, T_CV, T_AGENDA, T_N };
-static const char *const TPL_NAMES[T_N] = {"hero", "prog", "list", "msg", "kpi", "ring", "img", "cv", "agenda"};
+enum CardTpl : uint8_t { T_HERO, T_PROG, T_LIST, T_MSG, T_KPI, T_RING, T_IMG, T_CV, T_AGENDA, T_COMMUTE, T_N };
+static const char *const TPL_NAMES[T_N] = {"hero", "prog", "list", "msg", "kpi", "ring", "img", "cv", "agenda", "commute"};
 
 // Colour tokens (HA never sends hex): w s a r rc nv w2 w4 + tag names.
 // accent colours for cards: y yellow, g green, b blue, v violet (amber/red stay reserved for departures)

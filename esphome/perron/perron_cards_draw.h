@@ -163,6 +163,7 @@ static void canvas(Display &it, const Fonts &F, const HaCard &c) {
 // ------------------------------------------------------------------ full-screen templates
 static void agenda_rows(Display &it, const Fonts &F, const HaCard &c, uint32_t ms, int x0, int x1, int y0,
                         int pitch, int per_page, Font *f, int time_w);
+static void commute_body(Display &it, const Fonts &F, const HaCard &c, int x0, int x1, int y_badges, uint32_t now);
 
 static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms) {
   std::string a, b, meta;
@@ -268,6 +269,18 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
       draw_slot(it, c.img, 0, 11, 192, 44, fit_of(c, 'c'), c.fy);  // keep y55+ free for the info line
       if (!c.ti.empty()) txt(it, F, F.small, 4, 13, c.ti, C_WARM);
       break;
+    case T_COMMUTE: {
+      Color ac = accent(c);
+      std::string leave, arrive;
+      split2(c.sub, leave, arrive);
+      icon(it, 4, 13, "tram", 16, &ac);
+      txt_fit(it, F, F.dest, 26, 14, c.ti, 100, C_WARM);
+      txt(it, F, F.clock, 170, 13, c.val, C_WARM, 2);
+      txt(it, F, F.small, 190, 20, "min", dimc(ac, 80), 2);
+      txt(it, F, F.small, 26, 32, "los " + leave + "  an " + arrive, C_WARM);
+      commute_body(it, F, c, 26, 190, 44, now_epoch());
+      break;
+    }
     case T_AGENDA: {
       Color tcol = c.s == 'i' ? accent(c) : hc;
       int tx = 4;
@@ -282,6 +295,29 @@ static void card_full(Display &it, const Fonts &F, const HaCard &c, uint32_t ms)
     default: break;
   }
   (void) meta;  // the info line (pager) keeps running below every card (drawn by render())
+}
+
+// Line as a mini badge (tiny font) in its brand colour; returns the width.
+static int mini_badge(Display &it, const Fonts &F, int x, int y, const std::string &name) {
+  std::string key = (name.size() > 1 && name[0] == 'M' && isdigit((unsigned char) name[1])) ? name.substr(1) : name;
+  const LineStyle *ls = line_style(key);
+  uint32_t rgb = ls ? ls->rgb : 0x5A5A5A;
+  Color bg((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+  int w = std::max(9, text_w(F.tiny, name) + 3);
+  it.filled_rectangle(x, y, w, 7, bg);
+  for (int px : {0, w - 1})
+    for (int py : {0, 6}) it.draw_pixel_at(x + px, y + py, Color::BLACK);
+  txt(it, F, F.tiny, x + (w - text_w(F.tiny, name) + 1) / 2, y + 1, name, (ls && ls->dark_text) ? Color::BLACK : Color(255, 255, 255));
+  return w;
+}
+static void commute_body(Display &it, const Fonts &F, const HaCard &c, int x0, int x1, int y_badges, uint32_t now) {
+  int x = x0;
+  for (auto &r : c.rows) {
+    int w = text_w(F.tiny, r.label) + 3;
+    if (x + std::max(9, w) > x1) break;
+    x += mini_badge(it, F, x, y_badges, r.label) + 2;
+  }
+  (void) now;
 }
 
 // ------------------------------------------------------------------ panel templates (x128-191)
@@ -410,6 +446,20 @@ static void card_panel(Display &it, const Fonts &F, const HaCard &c, uint32_t ms
     case T_CV:
       canvas(it, F, c);
       break;
+    case T_COMMUTE: {  // routed commute: leave time, duration, lines, arrival
+      panel_header(it, F, c, false);
+      std::string leave, arrive;
+      split2(c.sub, leave, arrive);
+      uint32_t now = now_epoch();
+      bool soon = now && c.at && c.at <= now + 300;  // leave within 5 min -> amber
+      txt(it, F, F.tiny, 130, 13, "los", C_SEC);
+      txt(it, F, F.small, 130, 20, leave, soon ? C_CATCH : C_WARM);
+      txt(it, F, F.clock, 189, 11, c.val, C_WARM, 2);
+      txt(it, F, F.small, 189, 27, c.u, dimc(accent(c), 80), 2);
+      commute_body(it, F, c, 130, 190, 38, now);
+      txt(it, F, F.tiny, 130, 48, "an " + arrive, C_SEC);
+      break;
+    }
     default: break;
   }
 }
@@ -472,8 +522,10 @@ static bool occasional_on(const HaCard &c, uint32_t ms) {
 
 static CardView pick_cards(const Frame &fr, uint32_t ms, bool night) {
   CardView v;
-  auto &cards = ha_cards();
-  if (cards.empty()) return v;
+  std::vector<const HaCard *> all;
+  for (auto &c : ha_cards()) all.push_back(&c);
+  for (auto &c : fr.pt) all.push_back(&c);  // routed commutes (panel)
+  if (all.empty()) return v;
   bool leave_now = false;
   for (size_t i = 0; i < fr.rows.size() && i < 4; i++) {
     const Row &r = fr.rows[i];
@@ -483,7 +535,8 @@ static CardView pick_cards(const Frame &fr, uint32_t ms, bool night) {
   static const HaCard *last_full = nullptr;
   // 1) p1 events in their hold window (newest first)
   const HaCard *ev = nullptr;
-  for (auto &c : cards) {
+  for (const HaCard *cp : all) {
+    const HaCard &c = *cp;
     char z = card_zone(c);
     if (c.p == 1 && (z == 'e' || z == 'f') && ms - c.since_ms < c.hold * 1000u)
       if (!ev || c.since_ms > ev->since_ms) ev = &c;
@@ -493,11 +546,13 @@ static CardView pick_cards(const Frame &fr, uint32_t ms, bool night) {
   // 2) rotation slot for z f cards
   if (!v.full && !leave_now && !night) {
     std::vector<const HaCard *> rot;
-    for (auto &c : cards)
+    for (const HaCard *cp : all) {
+      const HaCard &c = *cp;
       if (card_zone(c) == 'f' && !(c.p == 1 && ms - c.since_ms < c.hold * 1000u)) {
         if (c.every) { if (occasional_on(c, ms) && !v.full) v.full = &c; }  // own schedule
         else rot.push_back(&c);
       }
+    }
     if (!v.full && !rot.empty() && (ms / 1000) % 45 < 8 && ms - last_full_end > 30000) {
       v.full = rot[(ms / 45000) % rot.size()];
     }
@@ -507,7 +562,8 @@ static CardView pick_cards(const Frame &fr, uint32_t ms, bool night) {
   if (night) return v;
   // 3) panel
   std::vector<const HaCard *> pan;
-  for (auto &c : cards) {
+  for (const HaCard *cp : all) {
+    const HaCard &c = *cp;
     char z = card_zone(c);
     if (&c == v.full) continue;
     if (!occasional_on(c, ms)) continue;

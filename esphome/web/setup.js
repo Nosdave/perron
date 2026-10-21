@@ -10,7 +10,8 @@
   const T = (n) => ["text", n], N = (n) => ["number", n], SEL = (n) => ["select", n], SW = (n) => ["switch", n];
   const E = {
     key: T("STIB API-Schlüssel"), points: T("Haltestellen"), lines: T("Linienfilter"),
-    station: T("Bahnhof"), tfilter: T("Zugfilter"), cfrom: T("Pendeln von"), cto: T("Pendeln nach"),
+    station: T("Bahnhof"), tfilter: T("Zugfilter"), pt1n: T("Pendeln 1 Name"), pt1t: T("Pendeln 1 Ziel"), pt1f: T("Pendeln 1 Start"), pt1w: T("Pendeln 1 Zeiten"),
+    pt2n: T("Pendeln 2 Name"), pt2t: T("Pendeln 2 Ziel"), pt2f: T("Pendeln 2 Start"), pt2w: T("Pendeln 2 Zeiten"), router: T("Pendeln Routing-Server"),
     loc: T("Standort"), nsrc: T("Nachrichtenquellen"), dfilter: T("Zielfilter"), alias: T("Kurznamen"), night: T("Nachtzeit"), free: T("Freitext"),
     layout: SEL("Layout"), lang: SEL("Sprache"), nmode: SEL("Nachtmodus"),
     badges: SEL("Helle Linien"), scroll: SEL("Laufschrift"),
@@ -51,6 +52,46 @@
       state[k] = e[0] === "switch" ? j.value === true || j.state === "ON" : (j.value ?? j.state ?? "");
       if (e[0] === "select") state[k + "_opts"] = j.option || [];
     }));
+  }
+
+  // ---- commutes by public transport: name, destination/start by address search, time window
+  function placeSearch(label, k, hint) {
+    const cur = (state[k] || "").split("|")[1] || "";
+    const shown = h("b", {}, cur || "–");
+    const inp = h("input", { type: "text", placeholder: "Adresse oder Haltestelle suchen …", autocomplete: "off" });
+    const list = h("div", { class: "results" });
+    let timer;
+    inp.addEventListener("input", () => {
+      clearTimeout(timer);
+      const q = inp.value.trim();
+      if (q.length < 3) { list.innerHTML = ""; return; }
+      timer = setTimeout(async () => {
+        const base = (state.router || "https://api.transitous.org").replace(/\/+$/, "");
+        try {
+          const r = await (await fetch(`${base}/api/v1/geocode?text=${enc(q)}`)).json();
+          list.innerHTML = "";
+          for (const p of r.slice(0, 6)) {
+            const area = (p.areas || []).filter((a) => a.default).map((a) => a.name).join(", ");
+            const name = p.type === "STOP" ? `${p.name} (Haltestelle)` : [p.name, p.street && p.houseNumber ? "" : "", area].filter(Boolean).join(", ");
+            list.append(h("button", { class: "ghost res", onclick: async () => {
+              const v = `${(+p.lat).toFixed(5)},${(+p.lon).toFixed(5)}|${p.name}`;
+              state[k] = v; await set(E[k], v); shown.textContent = p.name; list.innerHTML = ""; inp.value = ""; saved(shown);
+            } }, name));
+          }
+          if (!r.length) list.append(h("small", {}, "Nichts gefunden."));
+        } catch { list.innerHTML = '<small>Suche nicht erreichbar.</small>'; }
+      }, 350);
+    });
+    const clear = h("button", { class: "ghost", onclick: async () => { state[k] = ""; await set(E[k], ""); shown.textContent = "–"; } }, "leeren");
+    return h("label", { class: "f" }, h("span", {}, label, ": ", shown, " ", clear), inp, list, hint ? h("small", {}, hint) : "");
+  }
+  function commuteBlock(i) {
+    return h("div", { class: "grp-box" },
+      h("div", { class: "grp" }, `Pendeln ${i} (Bus & Bahn)`),
+      field("Name auf der Tafel", `pt${i}n`, { ph: i === 1 ? "z. B. Büro" : "z. B. Uni" }),
+      placeSearch("Ziel", `pt${i}t`),
+      placeSearch("Start", `pt${i}f`, "Leer = Standort der Tafel."),
+      field("Wann anzeigen", `pt${i}w`, { ph: "Mo-Fr 06:30-09:00", hint: "Tage + Zeitfenster, z. B. „Mo-Fr 06:30-09:00“ oder „Sa,So 09:00-12:00“. Ziel leer = aus." }));
   }
 
   // ---- brightness: curve over the room light, all in one place, with a live readout
@@ -194,8 +235,9 @@
       range("Gehzeit zum Bahnhof", "wtrain", 0, 30, 1, " min"),
       toggle("Zug immer anzeigen", "pintrain", "Reserviert eine Zeile für den nächsten Zug (Zugfilter, z. B. stadteinwärts), auch wenn er später fährt."),
       toggle("SNCB-Logo beim Zug", "sncblogo", "Zeigt das SNCB-Oval-B vor dem Zugziel."),
-      field("Pendeln von (iRail-ID)", "cfrom", { ph: "BE.NMBS.0088…" }),
-      field("Pendeln nach (iRail-ID)", "cto", { ph: "BE.NMBS.0088…" }),
+      commuteBlock(1), commuteBlock(2),
+      h("p", { class: "hint" }, "Verbindungen: ", h("a", { href: "https://transitous.org/sources/", target: "_blank" }, "Transitous"),
+        " (Fahrplandaten der Verkehrsbetriebe, Karte © OpenStreetMap). Server änderbar unter „Pendeln Routing-Server“ in Home Assistant."),
       h("p", { class: "hint" }, "Auto-Fahrzeiten (Waze) und Kalender kommen über die Home-Assistant-Integration."),
     ] },
     { t: "Daten", b: () => [

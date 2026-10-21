@@ -100,25 +100,97 @@ text:
     initial_value: ""
     max_length: 64
     entity_category: config
+  # Pendeln mit Bus & Bahn (0-2 Verbindungen, Tür zu Tür). Ziel/Start: "lat,lon|Name" (Adresssuche
+  # in der Einrichtung), Start leer = Standort der Tafel. Zeiten z. B. "Mo-Fr 06:30-09:00".
   - platform: template
-    id: cfg_commute_from
-    name: "Pendeln von"
-    icon: mdi:briefcase
+    id: cfg_pt1_name
+    name: "Pendeln 1 Name"
+    icon: mdi:account
     mode: text
     optimistic: true
     restore_value: true
     initial_value: ""
-    max_length: 40
+    max_length: 14
     entity_category: config
   - platform: template
-    id: cfg_commute_to
-    name: "Pendeln nach"
-    icon: mdi:briefcase
+    id: cfg_pt1_to
+    name: "Pendeln 1 Ziel"
+    icon: mdi:map-marker
     mode: text
     optimistic: true
     restore_value: true
     initial_value: ""
-    max_length: 40
+    max_length: 100
+    entity_category: config
+  - platform: template
+    id: cfg_pt1_from
+    name: "Pendeln 1 Start"
+    icon: mdi:home-map-marker
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 100
+    entity_category: config
+  - platform: template
+    id: cfg_pt1_when
+    name: "Pendeln 1 Zeiten"
+    icon: mdi:calendar-clock
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: "Mo-Fr 06:30-09:00"
+    max_length: 30
+    entity_category: config
+  - platform: template
+    id: cfg_pt2_name
+    name: "Pendeln 2 Name"
+    icon: mdi:account
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 14
+    entity_category: config
+  - platform: template
+    id: cfg_pt2_to
+    name: "Pendeln 2 Ziel"
+    icon: mdi:map-marker
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 100
+    entity_category: config
+  - platform: template
+    id: cfg_pt2_from
+    name: "Pendeln 2 Start"
+    icon: mdi:home-map-marker
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    max_length: 100
+    entity_category: config
+  - platform: template
+    id: cfg_pt2_when
+    name: "Pendeln 2 Zeiten"
+    icon: mdi:calendar-clock
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: "Mo-Fr 06:30-09:00"
+    max_length: 30
+    entity_category: config
+  - platform: template
+    id: cfg_router
+    name: "Pendeln Routing-Server"
+    icon: mdi:server-network
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: "https://api.transitous.org"
+    max_length: 80
     entity_category: config
   - platform: template
     id: cfg_location
@@ -447,8 +519,10 @@ interval:
           c.stib_lines = id(cfg_stib_lines).state;
           c.train_station = id(cfg_train_station).state;
           c.train_filter = id(cfg_train_filter).state;
-          c.commute_from = id(cfg_commute_from).state;
-          c.commute_to = id(cfg_commute_to).state;
+          c.cm[0] = {id(cfg_pt1_name).state, id(cfg_pt1_to).state, id(cfg_pt1_from).state, id(cfg_pt1_when).state};
+          c.cm[1] = {id(cfg_pt2_name).state, id(cfg_pt2_to).state, id(cfg_pt2_from).state, id(cfg_pt2_when).state};
+          if (!id(cfg_router).state.empty()) c.router = id(cfg_router).state;
+          while (!c.router.empty() && c.router.back() == '/') c.router.pop_back();
           float la, lo;
           if (sscanf(id(cfg_location).state.c_str(), "%f,%f", &la, &lo) == 2 && la > 49 && la < 52 && lo > 2 && lo < 7) {
             c.lat = la; c.lon = lo;

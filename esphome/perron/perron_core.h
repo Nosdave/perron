@@ -40,7 +40,7 @@
 namespace perron {
 
 static const char *const TAG = "perron";
-static const char *const USER_AGENT = "perron/0.4 (+https://github.com/Nosdave/perron)";
+static const char *const USER_AGENT = "perron/0.5 (+https://github.com/Nosdave/perron)";
 
 // ------------------------------------------------------------------ configuration
 struct Config {
@@ -50,7 +50,10 @@ struct Config {
   std::string stib_lines;           // optional line filter "92,60"; empty = all
   std::string train_station;        // iRail id "BE.NMBS.00881xxxx"; empty = off
   std::string train_filter;         // "p2" (platform), S-lines or destination substrings
-  std::string commute_from, commute_to;  // iRail station ids for the PT commute; empty = off
+  // Public-transport commutes (0-2): "lat,lon|label" targets, optional start (empty = home),
+  // "Mo-Fr 06:30-09:00" time window; routed door to door by a MOTIS server (Transitous).
+  struct Commute { std::string name, to, from, when; } cm[2];
+  std::string router = "https://api.transitous.org";
   float lat = 50.846f, lon = 4.352f;  // home position (weather + BE-Alert); default Brussels centre
   bool weather_on = true, bealert_on = true, news_on = false, disruptions_on = true;
   std::string news_src = "bt";  // news source codes (see NEWS_SOURCES)
@@ -112,8 +115,13 @@ struct Model {
   Weather wx;
   std::vector<Alert> alerts;
   std::vector<std::string> news;
-  uint32_t commute_dep = 0;  // public-transport commute: next departure epoch (incl. delay)
-  int commute_dur_s = 0;     // station-to-station duration
+  struct CommuteRes {         // routed public-transport commute (door to door)
+    bool active = false;
+    std::string name;
+    int dur_min = 0;
+    uint32_t leave = 0, arrive = 0;   // epoch: leave home / arrive
+    std::vector<std::string> lines;   // transit legs, e.g. "92", "M2", "S9"
+  } cm[2];
   uint32_t ts[SRC_N] = {0};  // last success per source (epoch)
   std::string err[SRC_N];    // last error per source ("" = ok)
   int http[SRC_N] = {0};     // last HTTP status per source
@@ -137,8 +145,11 @@ inline void set_config(const Config &c) {
   Config &cur = cfg_storage();
   bool changed = cur.stib_points != c.stib_points || cur.stib_lines != c.stib_lines ||
                  cur.train_station != c.train_station || cur.lang != c.lang || cur.stib_key != c.stib_key ||
-                 cur.train_filter != c.train_filter || cur.commute_from != c.commute_from ||
-                 cur.commute_to != c.commute_to || std::fabs(cur.lat - c.lat) > 1e-4 ||
+                 cur.train_filter != c.train_filter || cur.router != c.router ||
+                 cur.cm[0].to != c.cm[0].to || cur.cm[0].from != c.cm[0].from || cur.cm[0].when != c.cm[0].when ||
+                 cur.cm[1].to != c.cm[1].to || cur.cm[1].from != c.cm[1].from || cur.cm[1].when != c.cm[1].when ||
+                 cur.cm[0].name != c.cm[0].name || cur.cm[1].name != c.cm[1].name ||
+                 std::fabs(cur.lat - c.lat) > 1e-4 ||
                  std::fabs(cur.lon - c.lon) > 1e-4 || cur.weather_on != c.weather_on ||
                  cur.bealert_on != c.bealert_on || cur.news_on != c.news_on || cur.news_src != c.news_src ||
                  cur.disruptions_on != c.disruptions_on;
@@ -601,34 +612,96 @@ inline bool fetch_trains(const Config &c) {
   return true;
 }
 
+// "Mo-Fr 06:30-09:00", "Sa,So 09:00-12:00", "Mo,Mi 07:00-08:30"; empty = Mo-Fr 06:00-09:30.
+inline bool commute_window(const std::string &when_in, uint32_t now) {
+  std::string when = when_in.empty() ? std::string("Mo-Fr 06:00-09:30") : when_in;
+  static const char *const DAYS[7] = {"so", "mo", "di", "mi", "do", "fr", "sa"};
+  time_t t = now;
+  struct tm lt;
+  localtime_r(&t, &lt);
+  std::string low;
+  for (char ch : when) low += (char) tolower((unsigned char) ch);
+  auto day = [&](const std::string &d) { for (int k = 0; k < 7; k++) if (d.rfind(DAYS[k], 0) == 0) return k; return -1; };
+  bool day_ok = true;
+  size_t sp = low.find(' ');
+  std::string days = sp == std::string::npos ? "" : low.substr(0, sp);
+  std::string times = sp == std::string::npos ? low : low.substr(sp + 1);
+  if (low.find(':') == std::string::npos) { days = low; times = ""; }
+  if (!days.empty() && days != "täglich" && days != "taeglich" && days != "alle") {
+    day_ok = false;
+    for (auto &tok : split_csv(days)) {
+      size_t dash = tok.find('-');
+      int d0 = day(tok.substr(0, dash)), d1 = dash == std::string::npos ? d0 : day(tok.substr(dash + 1));
+      if (d0 < 0 || d1 < 0) continue;
+      for (int k = d0;; k = (k + 1) % 7) { if (k == lt.tm_wday) day_ok = true; if (k == d1) break; }
+    }
+  }
+  if (!day_ok) return false;
+  int h1, m1, h2, m2;
+  if (sscanf(times.c_str(), "%d:%d-%d:%d", &h1, &m1, &h2, &m2) != 4) return true;
+  int mod = lt.tm_hour * 60 + lt.tm_min, a = h1 * 60 + m1, b = h2 * 60 + m2;
+  return a <= b ? (mod >= a && mod < b) : (mod >= a || mod < b);
+}
+
 inline bool fetch_commute(const Config &c) {
-  if (c.commute_from.empty() || c.commute_to.empty()) {
-    Lock l; model_storage().commute_dep = 0; model_storage().gen++;
-    return true;
+  uint32_t now = now_epoch();
+  Model::CommuteRes res[2];
+  std::string err;
+  int st = 0, asked = 0, okn = 0;
+  for (int i = 0; i < 2; i++) {
+    const auto &cc = c.cm[i];
+    res[i].name = cc.name.empty() ? std::string("Pendeln ") + std::to_string(i + 1) : cc.name;
+    if (cc.to.empty() || !now || !commute_window(cc.when, now)) continue;
+    // privacy: the routing service only gets coordinates rounded to ~100 m (3 decimals)
+    auto coords = [&](const std::string &v) {
+      float la = 0, lo = 0;
+      char b[32];
+      if (sscanf(v.c_str(), "%f,%f", &la, &lo) != 2) return std::string();
+      snprintf(b, sizeof(b), "%.3f,%.3f", la, lo);
+      return std::string(b);
+    };
+    char home[32];
+    snprintf(home, sizeof(home), "%.3f,%.3f", c.lat, c.lon);
+    std::string from = cc.from.empty() ? std::string(home) : coords(cc.from);
+    if (from.empty() || coords(cc.to).empty()) { err = res[i].name + ": Ziel/Start ungültig"; continue; }
+    JsonDocument filter;
+    JsonObject it = filter["itineraries"].add<JsonObject>();
+    it["duration"] = true; it["startTime"] = true; it["endTime"] = true;
+    JsonObject lg = it["legs"].add<JsonObject>();
+    lg["mode"] = true; lg["routeShortName"] = true;
+    JsonDocument doc(PsramAllocator::instance());
+    asked++;
+    std::string e = get_json(c.router + "/api/v1/plan?numItineraries=3&detailedTransfers=false&fromPlace=" +
+                                 url_encode(from) + "&toPlace=" + url_encode(coords(cc.to)),
+                             doc, st, &filter, 512 * 1024);
+    if (!e.empty()) { err = res[i].name + ": " + e; continue; }
+    for (JsonVariantConst x : doc["itineraries"].as<JsonArrayConst>()) {
+      uint32_t s0 = parse_iso(x["startTime"] | (const char *) nullptr);
+      uint32_t s1 = parse_iso(x["endTime"] | (const char *) nullptr);
+      if (!s0 || !s1 || s0 + 60 < now) continue;  // first itinerary one can still take
+      res[i].active = true;
+      res[i].leave = s0;
+      res[i].arrive = s1;
+      res[i].dur_min = (int) ((s1 - s0 + 30) / 60);
+      for (JsonVariantConst l : x["legs"].as<JsonArrayConst>()) {
+        std::string mode = l["mode"] | "";
+        if (mode == "WALK" || mode == "BIKE" || mode == "CAR" || res[i].lines.size() >= 4) continue;
+        std::string n = l["routeShortName"] | "";
+        if (n.empty()) n = mode.substr(0, 3);
+        if (mode == "SUBWAY" && !n.empty() && isdigit((unsigned char) n[0])) n = "M" + n;
+        res[i].lines.push_back(led_safe(n));
+      }
+      break;
+    }
+    if (res[i].active) okn++;
+    else err = res[i].name + ": keine Verbindung";
   }
-  JsonDocument filter;
-  JsonObject f = filter["connection"].add<JsonObject>();
-  f["duration"] = true; f["departure"]["time"] = true; f["departure"]["delay"] = true;
-  f["departure"]["canceled"] = true; f["arrival"]["delay"] = true;
-  JsonDocument doc(PsramAllocator::instance());
-  int st;
-  std::string e = get_json("https://api.irail.be/v1/connections/?format=json&results=3&alerts=false&from=" +
-                           url_encode(c.commute_from) + "&to=" + url_encode(c.commute_to), doc, st, &filter);
-  if (!e.empty()) return fail(SRC_COMMUTE, e, st);
-  uint32_t best = 0;
-  int dur = 0;
-  for (JsonVariantConst cn : doc["connection"].as<JsonArrayConst>()) {
-    if (as_int(cn["departure"]["canceled"])) continue;
-    best = (uint32_t) (as_int(cn["departure"]["time"]) + as_int(cn["departure"]["delay"]));
-    dur = (int) (as_int(cn["duration"]) + as_int(cn["arrival"]["delay"]) - as_int(cn["departure"]["delay"]));
-    break;
-  }
-  if (!best) return fail(SRC_COMMUTE, "keine Verbindung", st);
   {
     Lock l;
-    model_storage().commute_dep = best;
-    model_storage().commute_dur_s = dur;
+    for (int i = 0; i < 2; i++) model_storage().cm[i] = res[i];
+    model_storage().gen++;
   }
+  if (asked && !okn) return fail(SRC_COMMUTE, err, st);
   ok(SRC_COMMUTE);
   return true;
 }
@@ -994,8 +1067,9 @@ inline void fetch_task(void *) {
         j.fails = good ? 0 : std::min<uint8_t>(j.fails + 1, 5);
         // keyless STIB: be gentle, the quota is shared per public IP
         uint32_t every = (j.src == SRC_STIB && c.stib_key.empty()) ? 60 : j.every_s;
-        uint32_t wait = good ? every : std::max<uint32_t>(30, every << (j.fails - 1));
-        j.next = mono_s() + std::min<uint32_t>(wait, every * 16);
+        // failures: retry soon (30 s, 60 s, 120 s, ...), at most every interval x4 apart
+        uint32_t wait = good ? every : std::min<uint32_t>(every * 4, 30u << (j.fails - 1));
+        j.next = mono_s() + wait;
         vTaskDelay(pdMS_TO_TICKS(250));
       }
       Lock l;
