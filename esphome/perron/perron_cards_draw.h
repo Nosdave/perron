@@ -312,7 +312,16 @@ static int mini_badge(Display &it, const Fonts &F, int x, int y, const std::stri
 }
 static void commute_body(Display &it, const Fonts &F, const HaCard &c, int x0, int x1, int y_badges, uint32_t now) {
   int x = x0;
+  static const Color C_WALKG(0x9A, 0x94, 0x8C);
   for (auto &r : c.rows) {
+    if (r.ic == "walk") {  // on foot: pedestrian glyph + minutes (like Google)
+      int w = 6 + text_w(F.tiny, r.label) + 2;
+      if (x + w > x1) break;
+      icon(it, x, y_badges, "walk", 7, &C_WALKG);
+      txt(it, F, F.tiny, x + 6, y_badges + 1, r.label, C_SEC);
+      x += w;
+      continue;
+    }
     int w = text_w(F.tiny, r.label) + 3;
     if (x + std::max(9, w) > x1) break;
     x += mini_badge(it, F, x, y_badges, r.label) + 2;

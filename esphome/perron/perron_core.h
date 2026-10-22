@@ -122,6 +122,7 @@ struct Model {
     int dur_min = 0;
     uint32_t leave = 0, arrive = 0;   // epoch: leave home / arrive
     std::vector<std::string> lines;   // transit legs, e.g. "92", "M2", "S9"
+    int walk_first = 0, walk_last = 0;  // minutes on foot before the first / after the last vehicle
   } cm[2];
   uint32_t ts[SRC_N] = {0};  // last success per source (epoch)
   std::string err[SRC_N];    // last error per source ("" = ok)
@@ -684,11 +685,18 @@ inline bool fetch_commute(const Config &c) {
       uint32_t s0 = parse_iso(x["startTime"] | (const char *) nullptr);
       uint32_t s1 = parse_iso(x["endTime"] | (const char *) nullptr);
       if (!s0 || !s1 || s0 + 60 < now || s0 > now + 45 * 60) continue;
-      int transit = 0, tiny = 0;
+      int transit = 0, tiny = 0, w_first = 0, w_last = 0;
       std::vector<std::string> lines;
       for (JsonVariantConst l : x["legs"].as<JsonArrayConst>()) {
         std::string mode = l["mode"] | "";
-        if (mode == "WALK" || mode == "BIKE" || mode == "CAR") continue;
+        if (mode == "WALK") {
+          uint32_t w0 = parse_iso(l["startTime"] | (const char *) nullptr), w1 = parse_iso(l["endTime"] | (const char *) nullptr);
+          int wm = (w0 && w1 > w0) ? (int) ((w1 - w0 + 30) / 60) : 0;
+          if (!transit) w_first += wm; else w_last = wm;  // last walk = after the last vehicle
+          continue;
+        }
+        if (mode == "BIKE" || mode == "CAR") continue;
+        w_last = 0;
         transit++;
         uint32_t a0 = parse_iso(l["startTime"] | (const char *) nullptr), a1 = parse_iso(l["endTime"] | (const char *) nullptr);
         if (a0 && a1 && a1 - a0 < 180) tiny++;
@@ -706,6 +714,8 @@ inline bool fetch_commute(const Config &c) {
       res[i].arrive = s1;
       res[i].dur_min = (int) ((s1 - s0 + 30) / 60);
       res[i].lines = lines;
+      res[i].walk_first = w_first;
+      res[i].walk_last = w_last;
     }
     if (res[i].active) okn++;
     else err = res[i].name + ": keine Verbindung";
@@ -718,6 +728,19 @@ inline bool fetch_commute(const Config &c) {
   if (asked && !okn) return fail(SRC_COMMUTE, err, st);
   ok(SRC_COMMUTE);
   return true;
+}
+
+// "35 min · los 08:21 · Fuß 10' > 92 > Fuß 7' · an 08:56" (empty when inactive) - sensor for HA
+inline std::string commute_text(int i) {
+  Model::CommuteRes r;
+  { Lock l; r = model_storage().cm[i]; }
+  if (!r.active) return "";
+  auto hm = [](uint32_t e) { time_t t = e; struct tm lt; localtime_r(&t, &lt); char b[8]; snprintf(b, sizeof(b), "%02d:%02d", lt.tm_hour, lt.tm_min); return std::string(b); };
+  std::string s = std::to_string(r.dur_min) + " min · los " + hm(r.leave) + " · ";
+  if (r.walk_first > 1) s += "Fuß " + std::to_string(r.walk_first) + "' > ";
+  for (size_t k = 0; k < r.lines.size(); k++) s += (k ? " > " : "") + r.lines[k];
+  if (r.walk_last > 1) s += " > Fuß " + std::to_string(r.walk_last) + "'";
+  return s + " · an " + hm(r.arrive);
 }
 
 // ------------------------------------------------------------------ KMI / IRM

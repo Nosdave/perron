@@ -568,8 +568,10 @@ static void build_pager(Frame &fr, const Look &L, const Fonts &F, uint32_t now) 
   for (int i = 0; i < 2; i++) {  // routed commutes: "Büro 33' · los 07:41 · 92 > M2 > M1"
     const auto &cm = m.cm[i];
     if (!cm.active || stale_src(m, SRC_COMMUTE, now, 1200) || (now && cm.leave + 60 < now)) continue;
-    std::string t = cm.name + " " + std::to_string(cm.dur_min) + "' · los " + hhmm(cm.leave);
-    for (size_t k = 0; k < cm.lines.size(); k++) t += (k ? " > " : " · ") + cm.lines[k];
+    std::string t = cm.name + " " + std::to_string(cm.dur_min) + "' · los " + hhmm(cm.leave) + " · ";
+    if (cm.walk_first > 1) t += "Fuß " + std::to_string(cm.walk_first) + "' > ";
+    for (size_t k = 0; k < cm.lines.size(); k++) t += (k ? " > " : "") + cm.lines[k];
+    if (cm.walk_last > 1) t += " > Fuß " + std::to_string(cm.walk_last) + "'";
     v.push_back({TAG_COMMUTE, t, 2, "pt" + std::to_string(i), 0});
   }
   if (L.free_on && !L.free_text.empty()) v.push_back({TAG_HA, led_safe(L.free_text), 3, "free", 0});
@@ -639,7 +641,10 @@ static void refresh_frame(const Fonts &F, const Look &L, uint32_t now) {
     c.ti = cm.name; c.val = std::to_string(cm.dur_min); c.u = "min";
     c.sub = hhmm(cm.leave) + "|" + hhmm(cm.arrive);
     c.at = cm.leave;
+    auto walk = [&](int m) { if (m > 1) { ListRow r; r.ic = "walk"; r.label = std::to_string(m); c.rows.push_back(r); } };
+    walk(cm.walk_first);
     for (auto &ln : cm.lines) { ListRow r; r.label = ln; c.rows.push_back(r); }
+    walk(cm.walk_last);
     fr.pt.push_back(c);
   }
   // P0 takeover: BE-Alert, HA critical, or KMI orange/red (fresh data only)

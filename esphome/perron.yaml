@@ -166,6 +166,17 @@ sensor:
     entity_category: diagnostic
 
 text_sensor:
+  # Pendeln: aktuelle Verbindung je Slot (leer = ausserhalb des Zeitfensters / keine)
+  - platform: template
+    name: "Pendeln 1 Verbindung"
+    icon: mdi:transit-connection-variant
+    update_interval: 60s
+    lambda: 'return perron::commute_text(0);'
+  - platform: template
+    name: "Pendeln 2 Verbindung"
+    icon: mdi:transit-connection-variant
+    update_interval: 60s
+    lambda: 'return perron::commute_text(1);'
   - platform: debug
     reset_reason:
       name: "Neustart-Grund"
