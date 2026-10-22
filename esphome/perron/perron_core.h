@@ -19,6 +19,7 @@
 #pragma once
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <cstring>
 #include <ctime>
@@ -668,30 +669,43 @@ inline bool fetch_commute(const Config &c) {
     JsonObject it = filter["itineraries"].add<JsonObject>();
     it["duration"] = true; it["startTime"] = true; it["endTime"] = true;
     JsonObject lg = it["legs"].add<JsonObject>();
-    lg["mode"] = true; lg["routeShortName"] = true;
+    lg["mode"] = true; lg["routeShortName"] = true; lg["startTime"] = true; lg["endTime"] = true;
     JsonDocument doc(PsramAllocator::instance());
     asked++;
-    std::string e = get_json(c.router + "/api/v1/plan?numItineraries=3&detailedTransfers=false&fromPlace=" +
+    std::string e = get_json(c.router + "/api/v1/plan?numItineraries=6&detailedTransfers=false&fromPlace=" +
                                  url_encode(from) + "&toPlace=" + url_encode(coords(cc.to)),
                              doc, st, &filter, 512 * 1024);
     if (!e.empty()) { err = res[i].name + ": " + e; continue; }
+    // Pick like a person would: earliest arrival, but every transfer costs 5 min and a transit
+    // hop under 3 min (one stop by bus instead of a short walk) another 5 min; only itineraries
+    // one can still take (leave >= now - 1 min) and that leave within the next 45 min.
+    long best_score = LONG_MAX;
     for (JsonVariantConst x : doc["itineraries"].as<JsonArrayConst>()) {
       uint32_t s0 = parse_iso(x["startTime"] | (const char *) nullptr);
       uint32_t s1 = parse_iso(x["endTime"] | (const char *) nullptr);
-      if (!s0 || !s1 || s0 + 60 < now) continue;  // first itinerary one can still take
+      if (!s0 || !s1 || s0 + 60 < now || s0 > now + 45 * 60) continue;
+      int transit = 0, tiny = 0;
+      std::vector<std::string> lines;
+      for (JsonVariantConst l : x["legs"].as<JsonArrayConst>()) {
+        std::string mode = l["mode"] | "";
+        if (mode == "WALK" || mode == "BIKE" || mode == "CAR") continue;
+        transit++;
+        uint32_t a0 = parse_iso(l["startTime"] | (const char *) nullptr), a1 = parse_iso(l["endTime"] | (const char *) nullptr);
+        if (a0 && a1 && a1 - a0 < 180) tiny++;
+        if (lines.size() >= 4) continue;
+        std::string n = l["routeShortName"] | "";
+        if (n.empty()) n = mode.substr(0, 3);
+        if (mode == "SUBWAY" && !n.empty() && isdigit((unsigned char) n[0])) n = "M" + n;
+        lines.push_back(led_safe(n));
+      }
+      long score = (long) s1 + 300L * std::max(0, transit - 1) + 300L * tiny;
+      if (score >= best_score) continue;
+      best_score = score;
       res[i].active = true;
       res[i].leave = s0;
       res[i].arrive = s1;
       res[i].dur_min = (int) ((s1 - s0 + 30) / 60);
-      for (JsonVariantConst l : x["legs"].as<JsonArrayConst>()) {
-        std::string mode = l["mode"] | "";
-        if (mode == "WALK" || mode == "BIKE" || mode == "CAR" || res[i].lines.size() >= 4) continue;
-        std::string n = l["routeShortName"] | "";
-        if (n.empty()) n = mode.substr(0, 3);
-        if (mode == "SUBWAY" && !n.empty() && isdigit((unsigned char) n[0])) n = "M" + n;
-        res[i].lines.push_back(led_safe(n));
-      }
-      break;
+      res[i].lines = lines;
     }
     if (res[i].active) okn++;
     else err = res[i].name + ": keine Verbindung";
