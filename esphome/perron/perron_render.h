@@ -299,6 +299,7 @@ struct Frame {
   std::vector<Row> rows;
   std::vector<PagerItem> pager;
   std::string p0_title, p0_body;
+  bool p0_persist = false;       // HA alarm (smoke/gas): full screen until HA clears it
   std::vector<std::string> p0_lines;
   bool train_stale = false, stib_stale = false, any_data = false;
   std::vector<HaCard> pt;        // routed commutes as panel cards (rebuilt with the frame)
@@ -649,12 +650,17 @@ static void refresh_frame(const Fonts &F, const Look &L, uint32_t now) {
   }
   // P0 takeover: BE-Alert, HA critical, or KMI orange/red (fresh data only)
   std::string title, body;
-  for (auto &a : fr.m.alerts) {
-    if ((a.source == 1 || a.source == 3) && (!a.expires || !now || a.expires > now)) {
-      title = a.source == 1 ? s.bealert : s.alert;
-      body = a.text;
-      break;
+  bool persist = false;
+  for (int want : {3, 1}) {  // an HA alarm (smoke, gas, water) wins over BE-Alert
+    for (auto &a : fr.m.alerts) {
+      if (a.source == want && (!a.expires || !now || a.expires > now)) {
+        title = a.source == 1 ? s.bealert : s.alert;
+        body = a.text;
+        persist = a.source == 3;
+        break;
+      }
     }
+    if (!body.empty()) break;
   }
   if (body.empty() && fr.m.wx.valid && fr.m.wx.warning_level >= 2 && !stale_src(fr.m, SRC_WX, now, 3 * 900)) {
     title = std::string(s.kmi) + " " + s.alert;
@@ -662,6 +668,7 @@ static void refresh_frame(const Fonts &F, const Look &L, uint32_t now) {
   }
   if (body != fr.p0_body) { fr.p0_body = body; wrap(F, F.mid, body, 188, fr.p0_lines); }
   fr.p0_title = title;
+  fr.p0_persist = persist;
 }
 
 // ------------------------------------------------------------------ drawing pieces
@@ -1078,9 +1085,10 @@ static void render(Display &it, const Fonts &F, const Look &L, const esphome::ES
   if (!fr.p0_body.empty()) {
     if (fr.p0_body != p0_last) { p0_last = fr.p0_body; p0_since = ms; }
     uint32_t el = ms - p0_since;
-    bool show = el < 20000 || ((el - 20000) % 600000) >= 592000;
+    // BE-Alert / KMI: 20 s, then 8 s every 10 min; an HA alarm stays on screen until cleared
+    bool show = fr.p0_persist || el < 20000 || ((el - 20000) % 600000) >= 592000;
     if (show) {
-      uint32_t page_base = el < 20000 ? p0_since : ms - ((el - 20000) % 600000 - 592000);
+      uint32_t page_base = (fr.p0_persist || el < 20000) ? p0_since : ms - ((el - 20000) % 600000 - 592000);
       takeover(it, F, fr, t, page_base);
       return;
     }
