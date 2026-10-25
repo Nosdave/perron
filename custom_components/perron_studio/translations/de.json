@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Perron Studio",
+        "description": "Wähle deine Perron-Tafel unter den ESPHome-Geräten. Für Live-Bild und Vorschau wird ein Zugangs-Token erzeugt und über die verschlüsselte ESPHome-Verbindung an die Tafel übertragen.",
+        "data": { "esphome_entry_id": "Tafel" }
+      }
+    },
+    "abort": {
+      "no_esphome": "Kein ESPHome-Gerät gefunden. Binde die Perron-Tafel zuerst mit der ESPHome-Integration ein.",
+      "already_configured": "Diese Tafel ist bereits eingerichtet."
+    }
+  },
+  "services": {
+    "show": {
+      "name": "Kachel zeigen",
+      "description": "Zeigt eine Perron-Studio-Kachel jetzt auf der Tafel (Sprachbefehl, Knopf, Automation).",
+      "fields": {
+        "tile": { "name": "Kachel", "description": "Name oder ID der Kachel." },
+        "zone": { "name": "Wo", "description": "Vollbild, Kachel rechts oder Infozeile (Standard: Einstellung der Kachel)." },
+        "duration": { "name": "Dauer", "description": "Sekunden (Standard: Einstellung der Kachel)." }
+      }
+    },
+    "hide": {
+      "name": "Kachel ausblenden",
+      "description": "Nimmt eine Kachel von der Tafel.",
+      "fields": { "tile": { "name": "Kachel", "description": "Name oder ID der Kachel." } }
+    },
+    "show_commute": {
+      "name": "Pendeln zeigen",
+      "description": "Berechnet Pendel-Verbindung 1 oder 2 jetzt und zeigt sie im Vollbild.",
+      "fields": {
+        "slot": { "name": "Verbindung", "description": "1 oder 2" },
+        "duration": { "name": "Dauer", "description": "Sekunden" }
+      }
+    }
+  }
+}

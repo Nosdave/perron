@@ -1,0 +1,14 @@
+{
+  "domain": "perron_studio",
+  "name": "Perron Studio",
+  "after_dependencies": ["esphome"],
+  "codeowners": ["@Nosdave"],
+  "config_flow": true,
+  "dependencies": ["camera", "frontend", "http", "panel_custom"],
+  "documentation": "https://github.com/Nosdave/perron/blob/main/docs/studio.md",
+  "integration_type": "service",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/Nosdave/perron/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

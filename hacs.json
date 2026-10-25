@@ -1,4 +1,5 @@
 {
-  "name": "Perron (legacy integration)",
-  "homeassistant": "2024.12.0"
+  "name": "Perron Studio",
+  "homeassistant": "2024.12.0",
+  "render_readme": true
 }

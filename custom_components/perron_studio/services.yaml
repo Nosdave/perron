@@ -1,0 +1,49 @@
+show:
+  fields:
+    tile:
+      required: true
+      example: "Energie"
+      selector:
+        text:
+    zone:
+      example: "f"
+      selector:
+        select:
+          options:
+            - label: "Vollbild"
+              value: "f"
+            - label: "Kachel rechts"
+              value: "p"
+            - label: "Infozeile"
+              value: "l"
+    duration:
+      example: 20
+      selector:
+        number:
+          min: 3
+          max: 3600
+          unit_of_measurement: s
+hide:
+  fields:
+    tile:
+      required: true
+      example: "Energie"
+      selector:
+        text:
+show_commute:
+  fields:
+    slot:
+      required: true
+      example: 1
+      selector:
+        select:
+          options:
+            - "1"
+            - "2"
+    duration:
+      example: 30
+      selector:
+        number:
+          min: 5
+          max: 120
+          unit_of_measurement: s

@@ -50,8 +50,8 @@ events expanded by Home Assistant) and an optional free-text entity to the board
 - Only select travel-time sensors that are actually polled; disabled polling sends frozen values.
 - Use either the blueprint or the legacy integration's board push for commute times, not both.
 
-## Legacy integration
+## Perron Studio
 
-`custom_components/diele_board` is the earlier Home Assistant integration. It is no longer needed
-— the firmware fetches all transit data itself, and the blueprint covers the extras — and will be
-removed. If you still run it, disable its STIB polling to avoid using the API quota twice.
+The Home Assistant integration in `custom_components/perron_studio` adds a side panel to design
+and schedule tiles with a pixel-exact preview, a live view of the board as a camera entity and
+the services `perron_studio.show` / `hide` / `show_commute`. See [studio.md](studio.md).

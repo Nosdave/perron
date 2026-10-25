@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Perron Studio",
+        "description": "Choose your Perron board among the ESPHome devices. An access token for the live view and the preview is created and transferred to the board over the encrypted ESPHome connection.",
+        "data": { "esphome_entry_id": "Board" }
+      }
+    },
+    "abort": {
+      "no_esphome": "No ESPHome device found. Add the Perron board with the ESPHome integration first.",
+      "already_configured": "This board is already set up."
+    }
+  },
+  "services": {
+    "show": {
+      "name": "Show tile",
+      "description": "Shows a Perron Studio tile on the board now (voice command, button, automation).",
+      "fields": {
+        "tile": { "name": "Tile", "description": "Name or id of the tile." },
+        "zone": { "name": "Where", "description": "Full screen, right panel or info line (default: the tile's setting)." },
+        "duration": { "name": "Duration", "description": "Seconds (default: the tile's setting)." }
+      }
+    },
+    "hide": {
+      "name": "Hide tile",
+      "description": "Removes a tile from the board.",
+      "fields": { "tile": { "name": "Tile", "description": "Name or id of the tile." } }
+    },
+    "show_commute": {
+      "name": "Show commute",
+      "description": "Routes commute 1 or 2 now and shows it full screen.",
+      "fields": {
+        "slot": { "name": "Commute", "description": "1 or 2" },
+        "duration": { "name": "Duration", "description": "Seconds" }
+      }
+    }
+  }
+}

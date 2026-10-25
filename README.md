@@ -65,7 +65,7 @@ See [docs/home-assistant.md](docs/home-assistant.md).
 | `blueprints/` | Home Assistant automation blueprint |
 | `tools/` | Pixel-exact mockup renderer and asset generators |
 | `hardware/` | Bill of materials |
-| `custom_components/diele_board/` | Legacy Home Assistant integration (deprecated, see docs) |
+| `custom_components/perron_studio/` | Perron Studio: Home Assistant integration – live view, tile editor with preview, services |
 
 Development notes: [docs/development.md](docs/development.md) · Data sources and licences:
 [docs/data-sources.md](docs/data-sources.md)
