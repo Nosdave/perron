@@ -70,6 +70,19 @@ struct HaCard {
 
 inline std::vector<HaCard> &ha_cards() { static std::vector<HaCard> v; return v; }
 inline uint32_t &cards_gen() { static uint32_t g = 0; return g; }
+// On demand: commute slot i full screen until this millis() value (HA action show_commute).
+inline uint32_t &pt_show_until(int i) { static uint32_t u[2] = {0, 0}; return u[i & 1]; }
+inline uint32_t &pt_show_secs(int i) { static uint32_t s[2] = {20, 20}; return s[i & 1]; }
+inline void show_commute(int slot, int secs) {
+  int i = std::max(1, std::min(2, slot)) - 1;
+  secs = std::max(5, std::min(120, secs));
+  pt_show_secs(i) = secs;
+  pt_show_until(i) = esphome::millis() + secs * 1000u;
+  uint32_t now = now_epoch();
+  if (now) commute_demand_until(i) = now + secs + 120;  // route now, even outside the time window
+  commute_kick() = true;
+  card_status() = "Pendeln " + std::to_string(i + 1) + " auf Abruf";
+}
 // Last parser / image result, published as the "Kartenstatus" text sensor.
 inline std::string &card_status() { static std::string s = "-"; return s; }
 

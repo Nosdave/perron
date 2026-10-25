@@ -639,6 +639,11 @@ static void refresh_frame(const Fonts &F, const Look &L, uint32_t now) {
     if (!cm.active || stale_src(fr.m, SRC_COMMUTE, now, 1200) || (now && cm.leave + 60 < now)) continue;
     HaCard c;
     c.id = "pt" + std::to_string(i); c.t = T_COMMUTE; c.p = 2; c.z = 'p'; c.tag = K_COM; c.ac = K_B;
+    uint32_t ms_now = esphome::millis();
+    if ((int32_t) (pt_show_until(i) - ms_now) > 0) {  // asked for on demand: full screen
+      c.p = 1; c.z = 'f'; c.force = true; c.hold = pt_show_secs(i);
+      c.since_ms = pt_show_until(i) - pt_show_secs(i) * 1000u;
+    }
     c.ti = cm.name; c.val = std::to_string(cm.dur_min); c.u = "min";
     c.sub = hhmm(cm.leave) + "|" + hhmm(cm.arrive);
     c.at = cm.leave;

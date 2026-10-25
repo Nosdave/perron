@@ -23,6 +23,13 @@ api:
         - lambda: 'perron::push_image_chunk(key, seq, total, width, height, data);'
     # PNG, JPEG oder BMP per Link (z.B. HA entity_picture / camera_proxy mit Zugriffstoken).
     # JPEG bei camera_proxy, .jpg/.jpeg; BMP bei .bmp; sonst PNG.
+    # Pendel-Verbindung (Slot 1/2) auf Abruf ins Vollbild, auch ausserhalb des Zeitfensters
+    - action: show_commute
+      variables:
+        slot: int
+        seconds: int
+      then:
+        - lambda: 'perron::show_commute(slot, seconds);'
     - action: push_image_url
       variables:
         key: string

@@ -614,6 +614,10 @@ inline bool fetch_trains(const Config &c) {
   return true;
 }
 
+// On demand (HA action show_commute): route slot i now, even outside its time window.
+inline uint32_t &commute_demand_until(int i) { static uint32_t u[2] = {0, 0}; return u[i & 1]; }
+inline bool &commute_kick() { static bool k = false; return k; }
+
 // "Mo-Fr 06:30-09:00", "Sa,So 09:00-12:00", "Mo,Mi 07:00-08:30"; empty = Mo-Fr 06:00-09:30.
 inline bool commute_window(const std::string &when_in, uint32_t now) {
   std::string when = when_in.empty() ? std::string("Mo-Fr 06:00-09:30") : when_in;
@@ -653,7 +657,8 @@ inline bool fetch_commute(const Config &c) {
   for (int i = 0; i < 2; i++) {
     const auto &cc = c.cm[i];
     res[i].name = cc.name.empty() ? std::string("Pendeln ") + std::to_string(i + 1) : cc.name;
-    if (cc.to.empty() || !now || !commute_window(cc.when, now)) continue;
+    bool demand = now && commute_demand_until(i) > now;
+    if (cc.to.empty() || !now || (!demand && !commute_window(cc.when, now))) continue;
     // privacy: the routing service only gets coordinates rounded to ~100 m (3 decimals)
     auto coords = [&](const std::string &v) {
       float la = 0, lo = 0;
@@ -1096,6 +1101,10 @@ inline void fetch_task(void *) {
     Config c = take_config(dirty);
     if (dirty)
       for (auto &j : jobs) j.next = 0;
+    if (commute_kick()) {  // on-demand commute: fetch now
+      commute_kick() = false;
+      for (auto &j : jobs) if (j.src == SRC_COMMUTE) j.next = 0;
+    }
     if (now_epoch() && c.any()) {  // TLS + KMI key need valid time
       fix_card_ttls();
       for (auto &j : jobs) {

@@ -115,3 +115,8 @@ data: {key: chart, seq: 0, total: 3, width: 192, height: 64, data: "<base64>"}
 ```
 
 `tools/rgb565_chunks.py` converts any image into these parts.
+
+## Commute on demand
+
+`esphome.perron_show_commute` (`slot`: 1 or 2, `seconds`: 5–120) shows that public-transport route full
+screen right away, routed fresh even outside its time window (e.g. for a voice command or a button).
