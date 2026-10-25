@@ -32,6 +32,8 @@ esphome:
             g.fill(0);
             strncpy(g.data(), blob.c_str(), g.size() - 1);
           };
+          perron::studio_token() = std::string(id(g_studio_token).data());
+          perron::studio_register();  // /perron/screen.bmp + /perron/preview für Perron Studio
           // Bildkarten per URL (packages/cards.yaml)
           perron::url_loader() = [](uint8_t fmt, const std::string &url) {
             auto *img = fmt == 2 ? id(ha_jpg) : fmt ? id(ha_bmp) : id(ha_png);
@@ -45,6 +47,7 @@ esphome:
     - perron/perron_cards.h
     - perron/perron_render.h
     - perron/perron_cards_draw.h
+    - perron/perron_http.h
 
 esp32:
   board: adafruit_matrixportal_esp32s3   # verifiziert 18.10. (ESPHome 2026.5)

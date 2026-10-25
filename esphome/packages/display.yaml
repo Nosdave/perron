@@ -118,7 +118,7 @@ display:
       }
 
       // ---------- NORMAL ----------
-      perron::render(it, F, perron::look(), id(sntp_time).now());
+      perron::render_with_studio(it, F, perron::look(), id(sntp_time).now());  // + Perron Studio (live/preview)
 
 # 20 fps: Infozeilen-Laufschrift, "fährt ein"-Pfeile. Panel-Refresh (100 Hz) läuft per DMA.
 interval:

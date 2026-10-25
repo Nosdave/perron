@@ -17,6 +17,16 @@ api:
         ttl: int        # Sekunden, 0 = bis gelöscht
       then:
         - lambda: 'perron::push_card(key, message, tag, prio, ttl);'
+    # Perron Studio (HA-Integration): Zugangs-Token für /perron/screen.bmp und /perron/preview
+    - action: set_studio_token
+      variables:
+        token: string
+      then:
+        - lambda: |-
+            auto &g = id(g_studio_token);
+            g.fill(0);
+            strncpy(g.data(), token.c_str(), g.size() - 1);
+            perron::studio_token() = std::string(g.data());
     - action: clear_alert
       then:
         - lambda: 'perron::clear_ha_alert();'
@@ -29,6 +39,10 @@ globals:
     type: std::array<char, 480>
     restore_value: true
     initial_value: 'std::array<char, 480>{}'
+  - id: g_studio_token
+    type: std::array<char, 49>
+    restore_value: true
+    initial_value: 'std::array<char, 49>{}'
   - id: g_stib_key
     type: std::array<char, 65>
     restore_value: true

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perron Studio – Mockup</title>
+<style>
+  :root{--bg:#111318;--card:#1c1f26;--line:#2c3039;--fg:#e6e8ec;--sec:#9aa0aa;--pri:#03a9f4;--acc:#ffa000;--ok:#4fd18b;--chip:#262a33}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 Roboto,"Segoe UI",system-ui,sans-serif}
+  .app{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+  .side{background:#15171c;border-right:1px solid var(--line);padding:14px 0}
+  .side .brand{font:600 16px Roboto,sans-serif;padding:6px 18px 16px;color:var(--fg)}
+  .side a{display:flex;gap:12px;align-items:center;padding:10px 18px;color:var(--sec);text-decoration:none}
+  .side a.on{color:var(--pri);background:rgba(3,169,244,.10);border-right:3px solid var(--pri)}
+  .ico{width:18px;height:18px;border-radius:4px;background:currentColor;opacity:.75;display:inline-block}
+  header{display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--line)}
+  header h1{font-size:20px;font-weight:500;margin:0;flex:1}
+  .btn{background:var(--pri);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:600}
+  .btn.ghost{background:transparent;color:var(--pri);border:1px solid #2b6c8f}
+  main{padding:20px 24px;display:grid;gap:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h2{font-size:15px;margin:0 0 12px;font-weight:500;display:flex;align-items:center;gap:8px}
+  .led{width:100%;border-radius:8px;display:block;background:#0c0c0e}
+  .live{display:grid;grid-template-columns:1fr 260px;gap:16px;align-items:start}
+  .stat{display:grid;gap:8px;font-size:13px}
+  .stat div{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:5px 0}
+  .stat b{font-weight:500}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block;box-shadow:0 0 0 3px rgba(79,209,139,.2)}
+  table{width:100%;border-collapse:collapse}
+  th{font-weight:500;color:var(--sec);text-align:left;font-size:12px;letter-spacing:.04em;text-transform:uppercase;padding:8px}
+  td{padding:10px 8px;border-top:1px solid var(--line);vertical-align:middle}
+  .thumb{width:120px;border-radius:4px;display:block}
+  .chip{display:inline-block;background:var(--chip);border-radius:999px;padding:2px 10px;font-size:12px;margin:2px 4px 2px 0;color:var(--fg)}
+  .chip.y{background:rgba(255,196,0,.15);color:#ffc400}.chip.g{background:rgba(79,209,139,.15);color:#4fd18b}
+  .chip.b{background:rgba(65,189,245,.15);color:#41bdf5}.chip.v{background:rgba(180,140,255,.15);color:#b48cff}
+  .tog{width:34px;height:18px;border-radius:9px;background:var(--pri);position:relative;display:inline-block}
+  .tog::after{content:"";position:absolute;right:2px;top:2px;width:14px;height:14px;border-radius:50%;background:#fff}
+  .tog.off{background:#3a3f4a}.tog.off::after{left:2px;right:auto}
+  .edit{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+  label{display:block;font-size:12px;color:var(--sec);margin:12px 0 4px}
+  .in{background:#14161b;border:1px solid var(--line);border-radius:8px;padding:9px 11px;color:var(--fg);font-family:inherit;width:100%}
+  .mono{font-family:ui-monospace,Consolas,monospace;font-size:13px;color:#cfe8ff}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg span{flex:1;text-align:center;padding:8px;color:var(--sec);font-size:13px}
+  .seg span.on{background:rgba(3,169,244,.15);color:var(--pri);font-weight:600}
+  .icons{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+  .icons span{aspect-ratio:1;border:1px solid var(--line);border-radius:6px;display:grid;place-items:center;font-size:16px}
+  .icons span.on{border-color:var(--pri);background:rgba(3,169,244,.12)}
+  .sw{display:flex;gap:8px}.sw span{width:26px;height:26px;border-radius:50%;border:2px solid transparent}
+  .sw span.on{border-color:#fff}
+  .trig{display:grid;gap:8px}
+  .trig div{display:flex;gap:10px;align-items:center;background:#14161b;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .trig small{color:var(--sec);margin-left:auto}
+  .hint{color:var(--sec);font-size:12px;margin-top:6px}
+  .tabs{display:flex;gap:4px;margin-bottom:10px}
+  .tabs span{padding:6px 12px;border-radius:8px;color:var(--sec);font-size:13px}
+  .tabs span.on{background:var(--chip);color:var(--fg)}
+  .previewbox{position:sticky;top:0}
+  .val{color:#ffe9cc}
+  .section-title{margin:6px 0 0;font-size:13px;color:var(--fg);font-weight:500}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="side">
+    <div class="brand">Home Assistant</div>
+    <a><span class="ico"></span>Übersicht</a>
+    <a><span class="ico"></span>Energie</a>
+    <a class="on"><span class="ico"></span>Perron Studio</a>
+    <a><span class="ico"></span>Einstellungen</a>
+  </nav>
+  <div>
+    <header id="h1"><h1>Perron Studio</h1><button class="btn ghost">Tafel-Einstellungen</button><button class="btn">+ Neue Kachel</button></header>
+    <main id="overview">
+      <section class="card">
+        <h2><span class="dot"></span> Live – Diele <span class="chip" style="margin-left:auto">aktualisiert alle 2 s</span></h2>
+        <div class="live">
+          <img class="led" src="../out/c2_panel.png" alt="Tafel live">
+          <div class="stat">
+            <div><span>Gerade sichtbar</span><b>Kachel „Büro“</b></div>
+            <div><span>Nächste Karte</span><b>Energie in 6 s</b></div>
+            <div><span>Helligkeit</span><b>30 % · 4 lx</b></div>
+            <div><span>Datenquellen</span><b style="color:var(--ok)">alle ok</b></div>
+            <div><span>Temperatur Gehäuse</span><b>31 °C · Lüfter aus</b></div>
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Kacheln</h2>
+        <table>
+          <tr><th>Vorschau</th><th>Kachel</th><th>Wann</th><th>Wo</th><th>Aktiv</th></tr>
+          <tr><td><img class="thumb" src="../out/c2_kpi.png"></td><td><b>Energie</b><br><span class="chip y">Kennzahlen</span></td>
+              <td><span class="chip">alle 15 min, 10 s</span><span class="chip">Sprache „zeig PV“</span><span class="chip">Knopf</span></td><td>Vollbild</td><td><span class="tog"></span></td></tr>
+          <tr><td><img class="thumb" src="../out/c2_washer.png"></td><td><b>Waschmaschine</b><br><span class="chip v">Fortschritt</span></td>
+              <td><span class="chip">solange läuft</span><span class="chip">„fertig“ → Ereignis</span></td><td>Kachel · Vollbild bei Ende</td><td><span class="tog"></span></td></tr>
+          <tr><td><img class="thumb" src="../out/c2_panel.png"></td><td><b>Büro</b><br><span class="chip b">Pendeln (Tafel)</span></td>
+              <td><span class="chip">Mo–Fr 07:40–09:15</span><span class="chip">Sprache „wie komm ich ins Büro“</span></td><td>Kachel</td><td><span class="tog"></span></td></tr>
+          <tr><td style="color:var(--sec)">—</td><td><b>Türklingel</b><br><span class="chip">Klingel + Kamera</span></td>
+              <td><span class="chip">Wohnungs-/Lifttür klingelt</span></td><td>Vollbild 20 s → Kachel</td><td><span class="tog"></span></td></tr>
+          <tr><td style="color:var(--sec)">—</td><td><b>Rauch / Gas</b><br><span class="chip" style="color:#ff6b5a">Alarm</span></td>
+              <td><span class="chip">Melder löst aus</span></td><td>Vollbild rot, bis Entwarnung</td><td><span class="tog"></span></td></tr>
+          <tr><td style="color:var(--sec)">—</td><td><b>Agenda</b><br><span class="chip g">Agenda</span></td>
+              <td><span class="chip">06:00–09:30, ab 18:00</span><span class="chip">alle 10 min, 12 s</span></td><td>Kachel + Infozeile</td><td><span class="tog off"></span></td></tr>
+        </table>
+      </section>
+    </main>
+
+    <header style="margin-top:30px"><h1>Kachel bearbeiten · Energie</h1><button class="btn ghost">Jetzt auf der Tafel zeigen</button><button class="btn">Speichern</button></header>
+    <main>
+      <div class="edit">
+        <section class="card">
+          <div class="tabs"><span class="on">Inhalt</span><span>Wann</span><span>Wo &amp; wie lange</span></div>
+          <label>Vorlage</label>
+          <div class="seg"><span>Zahl</span><span class="on">Kennzahlen</span><span>Liste</span><span>Fortschritt</span><span>Text</span><span>Agenda</span><span>Bild</span><span>Frei</span></div>
+          <label>Titel</label><input class="in" value="Energie">
+          <p class="section-title" style="margin-top:14px">Feld 1</p>
+          <div class="row">
+            <div><label>Beschriftung</label><input class="in" value="PV jetzt"></div>
+            <div><label>Wert – Entität oder Template</label><div class="in mono">{{ (states('sensor.pv_leistung')|float/1000)|round(1) }}</div></div>
+          </div>
+          <div class="row"><div><label>Einheit</label><input class="in" value="kW"></div><div><label>Balken (%) – optional</label><input class="in" value="—"></div></div>
+          <p class="section-title" style="margin-top:14px">Feld 2 · Feld 3</p>
+          <div class="hint">Heute 1.9 kWh · Akku 11 % (sensor.batterie_soc_aktuell, Balken)</div>
+          <label>Symbol</label>
+          <div class="icons"><span class="on">☀</span><span>🔋</span><span>⚡</span><span>🚗</span><span>🧺</span><span>🔔</span><span>🏠</span><span>📅</span></div>
+          <label>Akzentfarbe</label>
+          <div class="sw"><span class="on" style="background:#ffc400"></span><span style="background:#4fd18b"></span><span style="background:#41bdf5"></span><span style="background:#b48cff"></span><span style="background:#7a746c"></span></div>
+        </section>
+        <section class="card previewbox">
+          <h2>Vorschau <span class="chip" style="margin-left:auto">von der Tafel gerendert</span></h2>
+          <img class="led" src="../out/c2_kpi.png">
+          <div class="tabs" style="margin-top:12px"><span class="on">Vollbild</span><span>Kachel rechts</span><span>Infozeile</span></div>
+          <p class="hint">Exakt so, wie es die Tafel zeigt – mit den aktuellen Werten aus Home Assistant. Zu lange Texte laufen durch, Fehler (z. B. unbekanntes Symbol) werden hier angezeigt.</p>
+          <h2 style="margin-top:18px">Wann</h2>
+          <div class="trig">
+            <div>⏱ Gelegentlich <small>alle 15 min für 10 s, 08:00–20:00</small></div>
+            <div>🎙 Sprache <small>„zeig die PV“ · „Energie auf die Tafel“</small></div>
+            <div>🔘 Knopf <small>Dashboard-Button „PV → Tafel“</small></div>
+            <div style="color:var(--sec)">＋ Auslöser hinzufügen (Zustand, Zeitplan, Ereignis …)</div>
+          </div>
+          <h2 style="margin-top:18px">Wo &amp; wie lange</h2>
+          <div class="seg"><span class="on">Vollbild</span><span>Kachel rechts</span><span>Infozeile</span></div>
+          <div class="row" style="margin-top:10px"><div><label>Dauer</label><input class="in" value="10 s"></div><div><label>Wichtigkeit</label><input class="in" value="Zustand (normal)"></div></div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

@@ -199,8 +199,14 @@ inline std::string led_safe(const std::string &in) {
   out.reserve(in.size());
   for (size_t i = 0; i < in.size();) {
     unsigned char c = in[i];
-    size_t n = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : 4;
-    if (i + n > in.size()) break;
+    size_t n = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 0;
+    bool valid = n > 0 && i + n <= in.size();
+    for (size_t k = 1; valid && k < n; k++) valid = ((unsigned char) in[i + k] & 0xC0) == 0x80;
+    if (!valid) {  // not UTF-8 (e.g. Latin-1 from a misconfigured client): take the byte as Latin-1
+      if (c >= 0xA0) { out += (char) (0xC0 | (c >> 6)); out += (char) (0x80 | (c & 0x3F)); }
+      i += 1;
+      continue;
+    }
     uint32_t cp = c;
     if (n == 2) cp = ((c & 0x1F) << 6) | (in[i + 1] & 0x3F);
     else if (n == 3) cp = ((c & 0x0F) << 12) | ((in[i + 1] & 0x3F) << 6) | (in[i + 2] & 0x3F);
