@@ -82,9 +82,12 @@ async def test_tile_always_pushes_card(hass, esphome_entry, board_calls, hass_ad
     assert card["id"] == "st_tpv" and card["t"] == "kpi" and card["z"] == "p"
     assert card["kpi"][0][:3] == ["PV", "3.4", "kW"] and card["kpi"][0][6] == "sun"
 
-    # content change -> re-push (debounced)
+    # content change -> re-push (throttled to min_interval, force skips the wait)
     hass.states.async_set("sensor.pv", "5000")
     await engine.async_evaluate(tile)
+    pushes = [json.loads(d["card"]) for s, d in board_calls if s == "perron_push_json"]
+    assert pushes[-1]["kpi"][0][1] == "3.4"  # too soon
+    await engine.async_evaluate(tile, force=True)
     pushes = [json.loads(d["card"]) for s, d in board_calls if s == "perron_push_json"]
     assert pushes[-1]["kpi"][0][1] == "5.0"
 

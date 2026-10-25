@@ -68,7 +68,7 @@ def new_tile(name: str = "Neue Kachel") -> dict:
         "cells": [],
         "rows": [],
         "when": {"mode": "manual", "condition": "", "days": "Mo-Fr", "from": "", "to": "",
-                 "every": 0, "show": 10, "events": [], "voice": ""},
+                 "every": 0, "show": 10, "events": [], "voice": "", "min_interval": 10},
         "where": {"zone": "p", "duration": 20, "prio": 2},
     }
 
@@ -86,6 +86,7 @@ class TileEngine:
         self._last_hash: dict[str, str] = {}
         self._last_push: dict[str, float] = {}
         self._debounce: dict[str, asyncio.TimerHandle] = {}
+        self._later: dict[str, asyncio.TimerHandle] = {}
         self.listeners: list[Callable[[], None]] = []
         self.images: dict[str, bytes] = {}           # key -> small JPEG served to the board
         self._img_sent: dict[str, tuple[str, float]] = {}
@@ -146,7 +147,7 @@ class TileEngine:
         for u in self._unsubs:
             u()
         self._unsubs.clear()
-        for h in self._debounce.values():
+        for h in [*self._debounce.values(), *self._later.values()]:
             h.cancel()
 
     # ------------------------------------------------------------- cards from automations
@@ -436,7 +437,19 @@ class TileEngine:
         card = self.place(self.build_card(tile), tile)
         h = hashlib.sha1(json.dumps(card, sort_keys=True).encode()).hexdigest()
         now = asyncio.get_running_loop().time()
-        if not force and self._last_hash.get(tile["id"]) == h and now - self._last_push.get(tile["id"], 0) < REFRESH_ACTIVE:
+        since = now - self._last_push.get(tile["id"], 0)
+        if not force and self._last_hash.get(tile["id"]) == h and since < REFRESH_ACTIVE:
+            return
+        # at most one push per min_interval (fast sensors such as PV power): catch up later
+        min_iv = max(2, int(tile.get("when", {}).get("min_interval") or 10))
+        if not force and since < min_iv:
+            if tile["id"] not in self._later:
+                def _again(tid: str = tile["id"]) -> None:
+                    self._later.pop(tid, None)
+                    t = next((x for x in self.tiles if x["id"] == tid), None)
+                    if t:
+                        self.hass.async_create_task(self.async_evaluate(t))
+                self._later[tile["id"]] = self.hass.loop.call_later(min_iv - since, _again)
             return
         if tile.get("template") in ("img", "ring"):
             await self._image_for(tile)
