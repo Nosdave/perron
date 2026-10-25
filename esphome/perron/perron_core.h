@@ -97,6 +97,7 @@ struct Alert {
   uint8_t level = 1;         // 1 info, 2 warning, 3 danger
   uint8_t source = 0;        // 0 STIB disruption, 1 BE-Alert, 3 HA critical
   uint32_t expires = 0;      // epoch, 0 = none
+  std::string key;           // HA alarm: id of the card that raised it
 };
 
 // Info card pushed from Home Assistant (calendar, car commute, free text, ...).
@@ -1022,7 +1023,8 @@ inline bool fetch_news(const Config &c) {
 
 // ------------------------------------------------------------------ HA push (ESPHome API action)
 // prio 0 = full-screen alert, 1..3 = pager priority. Empty message removes the card/alert.
-inline void push_card(const std::string &key, const std::string &text, int tag, int prio, int ttl_s) {
+inline void push_card(const std::string &key, const std::string &text, int tag, int prio, int ttl_s,
+                      uint8_t level = 3) {
   Lock l;
   auto &m = model_storage();
   m.gen++;
@@ -1031,12 +1033,15 @@ inline void push_card(const std::string &key, const std::string &text, int tag, 
   auto &al = m.alerts;
   uint32_t now = now_epoch();
   if (prio <= 0) {
-    al.erase(std::remove_if(al.begin(), al.end(), [](const Alert &x) { return x.source == 3; }), al.end());
+    // only this key's alarm: deleting or replacing another card must not end a running alarm
+    al.erase(std::remove_if(al.begin(), al.end(), [&](const Alert &x) { return x.source == 3 && x.key == key; }),
+             al.end());
     if (text.empty()) return;
     Alert a;
     a.text = led_safe(text);
-    a.level = 3;
+    a.level = level;
     a.source = 3;
+    a.key = key;
     a.expires = (ttl_s > 0 && now) ? now + ttl_s : 0;
     al.insert(al.begin(), a);
     return;

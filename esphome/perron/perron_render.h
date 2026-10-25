@@ -90,20 +90,21 @@ struct Strings {
   const char *no_deps, *no_live, *work, *train, *rain_in, *alert, *bealert, *kmi;
   const char *wd[7];
   const char *rain_from, *rain_now, *rain_until, *light, *moderate, *heavy;
+  const char *alarm;  // HA alarm with severity x (smoke, gas, water)
 };
 static const Strings &S(const std::string &lang) {
   static const Strings de = {"Keine Abfahrten", "Keine Live-Daten", "Arbeit", "Zug", "Regen in ca. %d h",
                              "WARNUNG", "BE-ALERT", "KMI", {"So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"},
-                             "Regen ab %s", "Regen jetzt", "bis ca. %s", "leicht", "mäßig", "stark"};
+                             "Regen ab %s", "Regen jetzt", "bis ca. %s", "leicht", "mäßig", "stark", "ALARM"};
   static const Strings fr = {"Pas de départ", "Pas de données", "Travail", "train", "Pluie dans ~%d h",
                              "ALERTE", "BE-ALERT", "IRM", {"di", "lu", "ma", "me", "je", "ve", "sa"},
-                             "Pluie dès %s", "Pluie maintenant", "jusqu'à ~%s", "faible", "modérée", "forte"};
+                             "Pluie dès %s", "Pluie maintenant", "jusqu'à ~%s", "faible", "modérée", "forte", "ALARME"};
   static const Strings nl = {"Geen vertrek", "Geen live-data", "Werk", "trein", "Regen over ~%d u",
                              "ALARM", "BE-ALERT", "KMI", {"zo", "ma", "di", "wo", "do", "vr", "za"},
-                             "Regen vanaf %s", "Regen nu", "tot ~%s", "licht", "matig", "zwaar"};
+                             "Regen vanaf %s", "Regen nu", "tot ~%s", "licht", "matig", "zwaar", "ALARM"};
   static const Strings en = {"No departures", "No live data", "Work", "train", "Rain in ~%d h",
                              "ALERT", "BE-ALERT", "RMI", {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"},
-                             "Rain from %s", "Rain now", "until ~%s", "light", "moderate", "heavy"};
+                             "Rain from %s", "Rain now", "until ~%s", "light", "moderate", "heavy", "ALARM"};
   if (lang == "fr") return fr;
   if (lang == "nl") return nl;
   if (lang == "en") return en;
@@ -659,7 +660,7 @@ static void refresh_frame(const Fonts &F, const Look &L, uint32_t now) {
   for (int want : {3, 1}) {  // an HA alarm (smoke, gas, water) wins over BE-Alert
     for (auto &a : fr.m.alerts) {
       if (a.source == want && (!a.expires || !now || a.expires > now)) {
-        title = a.source == 1 ? s.bealert : s.alert;
+        title = a.source == 1 ? s.bealert : a.level >= 3 ? s.alarm : s.alert;
         body = a.text;
         persist = a.source == 3;
         break;

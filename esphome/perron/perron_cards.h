@@ -426,11 +426,12 @@ inline std::string card_json(const std::string &json) {
     std::string body = c.ti;
     std::string rest = c.sub.empty() ? c.val : c.sub;
     if (!rest.empty()) body += (body.empty() ? "" : ": ") + rest;
-    push_card("j:" + id, body, 4, 0, c.ttl);
+    push_card("j:" + id, body, 4, 0, c.ttl, c.s == 'x' ? 3 : 2);
     if (it != v.end()) v.erase(it);
     cards_gen()++;
     return card_status() = "Alarm " + id + " aktiv";
   }
+  push_card("j:" + id, "", 6, 0, 0);  // was this id an alarm before? then that alarm ends now
   uint32_t now = now_epoch();
   c.expires = (c.ttl && now) ? now + c.ttl : 0;
   c.hash = fnv(json);
