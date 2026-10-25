@@ -70,6 +70,8 @@ struct HaCard {
 
 inline std::vector<HaCard> &ha_cards() { static std::vector<HaCard> v; return v; }
 inline uint32_t &cards_gen() { static uint32_t g = 0; return g; }
+// Last parser / image result, published as the "Kartenstatus" text sensor.
+inline std::string &card_status() { static std::string s = "-"; return s; }
 // On demand: commute slot i full screen until this millis() value (HA action show_commute).
 inline uint32_t &pt_show_until(int i) { static uint32_t u[2] = {0, 0}; return u[i & 1]; }
 inline uint32_t &pt_show_secs(int i) { static uint32_t s[2] = {20, 20}; return s[i & 1]; }
@@ -83,8 +85,6 @@ inline void show_commute(int slot, int secs) {
   commute_kick() = true;
   card_status() = "Pendeln " + std::to_string(i + 1) + " auf Abruf";
 }
-// Last parser / image result, published as the "Kartenstatus" text sensor.
-inline std::string &card_status() { static std::string s = "-"; return s; }
 
 static int tok(const char *s, int def = K_W) {
   if (!s || !*s) return def;
