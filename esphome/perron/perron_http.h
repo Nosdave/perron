@@ -155,6 +155,14 @@ static void render_with_studio(Display &it, const Fonts &F, const Look &L, const
   }
 }
 
+// ESPHome's request.send() only knows 200/404/409/500 -> set the real status line via ESP-IDF
+static void send_status(AsyncWebServerRequest *request, const char *status, const char *text) {
+  httpd_req_t *r = *request;
+  httpd_resp_set_status(r, status);
+  httpd_resp_set_type(r, "text/plain; charset=utf-8");
+  httpd_resp_sendstr(r, text);
+}
+
 class StudioHandler : public AsyncWebHandler {
  public:
   bool canHandle(AsyncWebServerRequest *request) const override {
@@ -166,13 +174,13 @@ class StudioHandler : public AsyncWebHandler {
     char buf[AsyncWebServerRequest::URL_BUF_SIZE];
     std::string url(request->url_to(buf).c_str());
     int kind = url == "/perron/screen.bmp" ? 1 : url == "/perron/preview" ? 2 : 0;
-    if (!kind) { request->send(404, "text/plain", "unknown"); return; }
+    if (!kind) { send_status(request, "404 Not Found", "unknown"); return; }
     auto tok = request->get_header("X-Perron-Token");
-    if (!tok.has_value() || !token_ok(tok.value())) { request->send(401, "text/plain", "token"); return; }
+    if (!tok.has_value() || !token_ok(tok.value())) { send_status(request, "401 Unauthorized", "token"); return; }
     static uint32_t last_ms = 0;  // at most one request every 250 ms
-    if (esphome::millis() - last_ms < 250) { request->send(429, "text/plain", "slow down"); return; }
+    if (esphome::millis() - last_ms < 250) { send_status(request, "429 Too Many Requests", "slow down"); return; }
     last_ms = esphome::millis();
-    if (xSemaphoreTake(studio_mtx(), pdMS_TO_TICKS(3000)) != pdTRUE) { request->send(503, "text/plain", "busy"); return; }
+    if (xSemaphoreTake(studio_mtx(), pdMS_TO_TICKS(3000)) != pdTRUE) { send_status(request, "503 Service Unavailable", "busy"); return; }
     StudioReq &rq = studio_req();
     rq.done = false;
     rq.err.clear();
@@ -182,18 +190,18 @@ class StudioHandler : public AsyncWebHandler {
       rq.zone = (z == "p" || z == "l") ? z[0] : 'f';
       if (rq.card.empty() || rq.card.size() > 1000) {
         xSemaphoreGive(studio_mtx());
-        request->send(rq.card.empty() ? 400 : 413, "text/plain", rq.card.empty() ? "card fehlt" : "card zu gross");
+        send_status(request, rq.card.empty() ? "400 Bad Request" : "413 Payload Too Large", rq.card.empty() ? "card fehlt" : "card zu gross");
         return;
       }
     }
     rq.kind = kind;
     for (int i = 0; i < 150 && !rq.done; i++) vTaskDelay(pdMS_TO_TICKS(10));  // max 1.5 s
     rq.kind = 0;
-    if (!rq.done) { xSemaphoreGive(studio_mtx()); request->send(504, "text/plain", "timeout"); return; }
+    if (!rq.done) { xSemaphoreGive(studio_mtx()); send_status(request, "504 Gateway Timeout", "timeout"); return; }
     if (rq.bmp.empty()) {
       std::string e = rq.err.empty() ? std::string("Fehler") : rq.err;
       xSemaphoreGive(studio_mtx());
-      request->send(400, "text/plain; charset=utf-8", e.c_str());
+      send_status(request, "400 Bad Request", e.c_str());
       return;
     }
     auto *res = request->beginResponse(200, "image/bmp", rq.bmp.data(), rq.bmp.size());
