@@ -1,6 +1,7 @@
 """Talking to the board: ESPHome actions (encrypted API) and the token-protected HTTP endpoints."""
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import logging
@@ -22,6 +23,9 @@ class Board:
         self.device = device
         self.host = host
         self.token = token
+        self._http_lock = asyncio.Lock()
+        self._next_ok = 0.0
+        self.night = False  # last answer from the board: in its night window
 
     # ------------------------------------------------------------- ESPHome actions
     def _service(self, action: str) -> str:
@@ -55,15 +59,30 @@ class Board:
 
     # ------------------------------------------------------------- HTTP (token protected)
     async def _get(self, method: str, path: str, data: dict | None = None) -> bytes:
+        # The board renders one request at a time and allows one every 250 ms: serialize all
+        # callers (panel live view, preview, thumbnails, camera entity) and retry a 429 once.
         session = async_get_clientsession(self.hass)
         url = f"http://{self.host}{path}"
         headers = {"X-Perron-Token": self.token}
-        async with session.request(method, url, data=data, headers=headers,
-                                   timeout=aiohttp.ClientTimeout(total=8)) as resp:
-            body = await resp.read()
-            if resp.status != 200:
-                raise BoardError(resp.status, body.decode("utf-8", "replace"))
-            return body
+        async with self._http_lock:
+            for attempt in range(3):
+                wait = self._next_ok - asyncio.get_running_loop().time()
+                if wait > 0:
+                    await asyncio.sleep(wait)
+                try:
+                    async with session.request(method, url, data=data, headers=headers,
+                                               timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                        body = await resp.read()
+                        status = resp.status
+                        self.night = resp.headers.get("X-Perron-Night") == "1"
+                finally:
+                    self._next_ok = asyncio.get_running_loop().time() + 0.3
+                if status == 200:
+                    return body
+                if status not in (429, 503) or attempt == 2:
+                    raise BoardError(status, body.decode("utf-8", "replace"))
+                self._next_ok += 0.2
+        raise BoardError(503, "busy")
 
     async def screen_bmp(self) -> bytes:
         return await self._get("GET", "/perron/screen.bmp")

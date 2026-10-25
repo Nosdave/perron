@@ -3,7 +3,7 @@
 
 const TPL = {
   hero: "Zahl", kpi: "Kennzahlen", list: "Liste", prog: "Fortschritt", msg: "Text",
-  agenda: "Agenda", ring: "Klingel", img: "Bild", cv: "Frei",
+  agenda: "Agenda", ring: "Klingel", img: "Bild", cv: "Frei", json: "Karten-JSON (Profi)",
 };
 const MODES = { manual: "Nur auf Abruf", always: "Immer", condition: "Solange Bedingung wahr", schedule: "Zeitfenster" };
 const ZONES = { f: "Vollbild", p: "Kachel rechts", l: "Infozeile" };
@@ -18,6 +18,7 @@ class PerronStudioPanel extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this.tiles = [];
+    this.external = [];      // cards that automations send to the board
     this.meta = null;
     this.edit = null;        // tile being edited (copy)
     this.zone = "f";         // preview zone
@@ -42,6 +43,7 @@ class PerronStudioPanel extends HTMLElement {
     try {
       this.meta = await this._hass.callApi("GET", "perron_studio/meta");
       this.tiles = await this._hass.callApi("GET", "perron_studio/tiles");
+      this.external = await this._hass.callApi("GET", "perron_studio/external");
     } catch (e) {
       this._toast("Perron Studio nicht erreichbar: " + (e.message || e));
     }
@@ -59,6 +61,7 @@ class PerronStudioPanel extends HTMLElement {
       try { t = JSON.parse(t).message || t; } catch (_) {}
       throw new Error(t);
     }
+    this._night = r.headers.get("X-Perron-Night") === "1";
     return URL.createObjectURL(await r.blob());
   }
   _toast(msg) {
@@ -174,7 +177,39 @@ class PerronStudioPanel extends HTMLElement {
       <td><div class="acts"><button class="ghost" data-show="${esc(t.id)}">Zeigen</button><button data-edit="${esc(t.id)}">Bearbeiten</button></div></td>
     </tr>`).join("")}
   </table>
+</section>
+<section class="card">
+  <h2>Karten aus Automationen <span class="chip">${this.external.length}</span></h2>
+  <p class="hint">Karten, die bestehende Automationen an die Tafel schicken – Studio sieht sie mit, ändert aber nichts.
+  „Zeigen“ holt die letzte Fassung jetzt auf die Tafel (auch per <code>perron_studio.show</code> mit der Karten-id).
+  „Übernehmen“ legt eine Kachel „Karten-JSON“ als Startpunkt an; die Automation läuft weiter, bis du sie abschaltest.</p>
+  ${this.external.length ? "" : '<p class="hint">Noch keine gesehen – erscheinen, sobald eine Automation eine Karte schickt.</p>'}
+  <table>${this.external.length ? "<tr><th>Letzte Fassung</th><th>Karte</th><th>Zuletzt</th><th>Status</th><th></th></tr>" : ""}
+  ${this.external.map((x) => `
+    <tr>
+      <td><img data-xthumb="${esc(x.id)}" alt=""></td>
+      <td><b>${esc((x.card || {}).ti || x.id)}</b><br><span class="chip">id ${esc(x.id)}</span><span class="chip">${esc(TPL[(x.card || {}).t] || (x.card || {}).t || "")}</span></td>
+      <td>${esc((x.at || "").replace("T", " ").slice(0, 16))}<br><span class="hint">${x.count || 0}× gesendet</span></td>
+      <td>${x.deleted ? '<span class="chip">gerade aus</span>' : '<span class="chip">auf der Tafel</span>'}${x.taken ? '<span class="chip">als Kachel übernommen</span>' : ""}</td>
+      <td><div class="acts">${x.card ? `<button class="ghost" data-xshow="${esc(x.id)}">Zeigen</button>` : ""}
+        ${x.card && !x.taken ? `<button data-ximport="${esc(x.id)}">Übernehmen</button>` : ""}</div></td>
+    </tr>`).join("")}
+  </table>
 </section>`;
+    main.querySelectorAll("[data-xshow]").forEach((el) => (el.onclick = async () => {
+      try {
+        await this._hass.callApi("POST", "perron_studio/external", { action: "show", id: el.dataset.xshow });
+        this._toast("Auf der Tafel");
+      } catch (e) { this._toast("Fehler: " + (e.message || e)); }
+    }));
+    main.querySelectorAll("[data-ximport]").forEach((el) => (el.onclick = async () => {
+      try {
+        const t = await this._hass.callApi("POST", "perron_studio/external", { action: "import", id: el.dataset.ximport });
+        this.tiles = await this._hass.callApi("GET", "perron_studio/tiles");
+        this.external = await this._hass.callApi("GET", "perron_studio/external");
+        this._open(t.id);
+      } catch (e) { this._toast("Fehler: " + (e.message || e)); }
+    }));
     main.querySelectorAll("[data-edit]").forEach((el) => (el.onclick = () => this._open(el.dataset.edit)));
     main.querySelectorAll("[data-show]").forEach((el) => (el.onclick = () => this._showNow(this.tiles.find((t) => t.id === el.dataset.show))));
     main.querySelectorAll("[data-en]").forEach((el) => (el.onchange = async () => {
@@ -192,6 +227,14 @@ class PerronStudioPanel extends HTMLElement {
       try {
         const u = await this._img("POST", "perron_studio/preview", { tile: t, zone: (t.where || {}).zone || "f" });
         img.src = u;
+      } catch (_) { /* board offline */ }
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    for (const x of this.external) {
+      const img = this.shadowRoot.querySelector(`[data-xthumb="${CSS.escape(x.id)}"]`);
+      if (!img || !x.tile) continue;
+      try {
+        img.src = await this._img("POST", "perron_studio/preview", { tile: x.tile, zone: (x.tile.where || {}).zone || "p" });
       } catch (_) { /* board offline */ }
       await new Promise((r) => setTimeout(r, 300));
     }
@@ -254,6 +297,12 @@ class PerronStudioPanel extends HTMLElement {
     } else if (tpl === "img") {
       h += this._field("Bild: Kamera-Entität oder URL", "image", "camera.x oder http://…/bild.png");
       h += this._field("Bildzeile", "sub1");
+    } else if (tpl === "json") {
+      h += `<label>Karte als JSON – darf ein Template sein (Ergebnis leer oder <code>none</code> = gerade keine Karte)</label>
+        <textarea data-k="card" style="min-height:260px">${esc(t.card || "{}")}</textarea>
+        <p class="hint">Felder wie in docs/cards.md (t, ti, val, sub, kpi, rows, p, z, s, every, show …). <code>p: 0</code> = Alarm (Vollbild bis die Vorlage wieder leer ist).
+        ${t.from_automation ? `Übernommen von der Automations-Karte <code>${esc(t.from_automation)}</code> – Werte hier durch Templates ersetzen, dann die Automation abschalten.` : ""}</p>`;
+      return h;
     } else if (tpl === "cv") {
       h += `<label>Elemente (JSON, siehe docs/cards.md)</label><textarea data-k="elements">${esc(t.elements || "[]")}</textarea>`;
     } else if (tpl === "kpi") {
@@ -381,7 +430,10 @@ class PerronStudioPanel extends HTMLElement {
     try {
       const u = await this._img("POST", "perron_studio/preview", { tile: this.edit, zone: this.zone });
       if (this._prevUrl) URL.revokeObjectURL(this._prevUrl);
-      this._prevUrl = u; img.src = u; err.textContent = "";
+      this._prevUrl = u; img.src = u;
+      err.textContent = this._night
+        ? "Tafel ist gerade im Nachtmodus: Vorschau zeigt das Tag-Layout. Nachts erscheinen nur Klingel, Alarme und Kacheln, die du jetzt abrufst (dann als Vollbild)."
+        : "";
     } catch (e) {
       err.textContent = e.message || String(e);
     }

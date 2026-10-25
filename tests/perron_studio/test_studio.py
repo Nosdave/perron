@@ -124,3 +124,78 @@ async def test_preview_and_live_views(hass, esphome_entry, board_calls, aioclien
     assert t["name"] == "X" and t["id"].startswith("t")
     r = await client.get("/api/perron_studio/tiles")
     assert len(await r.json()) == 1
+
+
+async def test_external_cards_registry_show_import(hass, esphome_entry, board_calls):
+    await _setup(hass, esphome_entry)
+    engine = next(v for k, v in hass.data[DOMAIN].items() if not k.startswith("_"))["engine"]
+    # an automation sends a card
+    await hass.services.async_call("esphome", "perron_push_json", {"card": json.dumps(
+        {"id": "pv", "t": "kpi", "ti": "Energie", "p": 2, "z": "f", "every": 900, "show": 10, "ttl": 3600,
+         "kpi": [["PV", "3.1", "kW", "y", -1, "", "sun"]]})}, blocking=True)
+    await hass.async_block_till_done()
+    assert engine.external["pv"]["card"]["ti"] == "Energie" and not engine.external["pv"]["deleted"]
+    # show it on demand by its id through the normal service
+    await hass.services.async_call(DOMAIN, "show", {"tile": "pv", "zone": "f", "duration": 12}, blocking=True)
+    card = json.loads([d for s, d in board_calls if s == "perron_push_json"][-1]["card"])
+    assert card["id"] == "x_pv_abruf" and card["force"] == 1 and card["z"] == "f" and "every" not in card
+    assert "x_pv_abruf" not in engine.external  # Studio's own push is not recorded
+    # take over as a JSON tile
+    tile = engine.tile_from_external("pv")
+    assert tile["template"] == "json" and json.loads(tile["card"])["ti"] == "Energie"
+    # the automation deletes it
+    await hass.services.async_call("esphome", "perron_push_json", {"card": '{"id":"pv","del":1}'}, blocking=True)
+    assert engine.external["pv"]["deleted"] and engine.external["pv"]["card"]["ti"] == "Energie"
+
+
+async def test_json_tile_template_and_empty(hass, esphome_entry, board_calls):
+    await _setup(hass, esphome_entry)
+    engine = next(v for k, v in hass.data[DOMAIN].items() if not k.startswith("_"))["engine"]
+    hass.states.async_set("sensor.wm", "in_use")
+    tpl = ("{% if is_state('sensor.wm','in_use') %}"
+           '{"t":"prog","ti":"Waschen","val":"42\'","pct":60,"p":2}'
+           "{% endif %}")
+    tile = await engine.async_upsert({"id": "twm", "name": "Wäsche", "template": "json", "card": tpl,
+                                      "when": {"mode": "always"}, "where": {"zone": "p"}})
+    await hass.async_block_till_done()
+    card = json.loads([d for s, d in board_calls if s == "perron_push_json"][-1]["card"])
+    assert card["id"] == "st_twm" and card["t"] == "prog" and card["z"] == "p" and card["pct"] == 60
+    hass.states.async_set("sensor.wm", "off")
+    await engine.async_evaluate(tile)
+    card = json.loads([d for s, d in board_calls if s == "perron_push_json"][-1]["card"])
+    assert card == {"id": "st_twm", "del": 1}
+
+
+async def test_alarm_json_tile_keeps_p0(hass, esphome_entry, board_calls):
+    await _setup(hass, esphome_entry)
+    engine = next(v for k, v in hass.data[DOMAIN].items() if not k.startswith("_"))["engine"]
+    hass.states.async_set("binary_sensor.smoke", "on")
+    await engine.async_upsert({"id": "tal", "name": "Rauch", "template": "json", "when": {"mode": "always"},
+                               "card": "{% if is_state('binary_sensor.smoke','on') %}{'t':'msg','p':0,'s':'x','ti':'Rauch'}{% endif %}"})
+    await hass.async_block_till_done()
+    card = json.loads([d for s, d in board_calls if s == "perron_push_json"][-1]["card"])
+    assert card["p"] == 0 and card["s"] == "x" and "z" not in card
+
+
+async def test_image_signed_url_and_view(hass, esphome_entry, board_calls, hass_client_no_auth):
+    await _setup(hass, esphome_entry)
+    await hass.config.async_update(internal_url="http://192.0.2.1:8123")
+    engine = next(v for k, v in hass.data[DOMAIN].items() if not k.startswith("_"))["engine"]
+
+    async def fake_fetch(src):
+        buf = io.BytesIO()
+        Image.new("RGB", (640, 480), (10, 200, 30)).save(buf, "PNG")
+        return buf.getvalue()
+
+    engine._fetch_picture = fake_fetch
+    ok = await engine._image_for({"id": "tcam", "image": "camera.door"})
+    assert ok
+    url = [d for s, d in board_calls if s == "perron_push_image_url"][-1]["url"]
+    assert url.startswith("http://192.0.2.1:8123/api/perron_studio/img/st_tcam.jpg?authSig=")
+    jpg = Image.open(io.BytesIO(engine.images["st_tcam"]))
+    assert jpg.format == "JPEG" and max(jpg.size) == 192
+    client = await hass_client_no_auth()  # the board has no HA login: only the signature
+    r = await client.get(url.split("8123", 1)[1])
+    assert r.status == 200 and r.headers["Content-Type"] == "image/jpeg"
+    r = await client.get("/api/perron_studio/img/st_tcam.jpg")
+    assert r.status == 401

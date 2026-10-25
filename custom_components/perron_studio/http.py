@@ -1,6 +1,7 @@
 """REST API for the Perron Studio panel (admin only, HA authentication)."""
 from __future__ import annotations
 
+import asyncio
 from http import HTTPStatus
 
 from aiohttp import web
@@ -85,16 +86,29 @@ class PreviewView(HomeAssistantView):
         eng = d["engine"]
         tile = body.get("tile") or {}
         zone = body.get("zone") if body.get("zone") in ZONES else "f"
-        card = eng.build_card({**new_tile(), **tile}, "preview")
+        tile = {**new_tile(), **tile}
+        card = eng.build_card(tile, "preview")
+        if card.get("img"):  # the picture has to be on the board first (it downloads it from HA)
+            await eng._image_for(tile, max_age=20)
         try:
-            bmp = await d["board"].preview_bmp(card, zone)
+            for _ in range(16):  # board answers "Bild lädt" until the download is decoded
+                try:
+                    bmp = await d["board"].preview_bmp(card, zone)
+                    break
+                except BoardError as err:
+                    if "Bild" not in err.text and err.status != 429:
+                        raise
+                    await asyncio.sleep(0.5)
+            else:
+                return self.json_message("Tafel: Bild kam nicht an", HTTPStatus.BAD_GATEWAY)
         except BoardError as err:
             return self.json_message(f"Tafel: {err.text}", HTTPStatus.BAD_GATEWAY)
         except Exception as err:  # noqa: BLE001 - board offline etc.
             return self.json_message(f"Tafel nicht erreichbar ({err})", HTTPStatus.BAD_GATEWAY)
         png = await hass.async_add_executor_job(bmp_to_png, bmp, 4, True)
-        return web.Response(body=png, content_type="image/png", headers={"Cache-Control": "no-store",
-                                                                         "X-Perron-Card": str(len(str(card)))})
+        return web.Response(body=png, content_type="image/png", headers={
+            "Cache-Control": "no-store", "X-Perron-Card": str(len(str(card))),
+            "X-Perron-Night": "1" if d["board"].night else "0"})
 
 
 class LiveView(HomeAssistantView):
@@ -128,7 +142,58 @@ class ShowView(HomeAssistantView):
         return self.json({"ok": True})
 
 
+class ExternalView(HomeAssistantView):
+    """Cards that automations send to the board: list, show now, take over as a tile."""
+
+    url = "/api/perron_studio/external"
+    name = "api:perron_studio:external"
+
+    async def get(self, request: web.Request) -> web.Response:
+        _admin(request)
+        _, d = _ctx(request)
+        eng = d["engine"]
+        out = []
+        for cid, rec in sorted(eng.external.items(), key=lambda kv: kv[1].get("at", ""), reverse=True):
+            out.append({**rec, "tile": eng.tile_from_external(cid),
+                        "taken": any(t.get("from_automation") == cid for t in eng.tiles)})
+        return self.json(out)
+
+    async def post(self, request: web.Request) -> web.Response:
+        _admin(request)
+        _, d = _ctx(request)
+        eng = d["engine"]
+        body = await request.json()
+        cid = str(body.get("id") or "")
+        if body.get("action") == "show":
+            ok = await eng.async_show_external(cid, body.get("zone"), body.get("duration"))
+            return self.json({"ok": ok})
+        if body.get("action") == "import":
+            tile = eng.tile_from_external(cid)
+            if tile is None:
+                return self.json_message("Karte unbekannt", HTTPStatus.NOT_FOUND)
+            return self.json(await eng.async_upsert(tile))
+        if body.get("action") == "forget":
+            eng.external.pop(cid, None)
+            await eng.async_save()
+            return self.json({"ok": True})
+        return self.json_message("action?", HTTPStatus.BAD_REQUEST)
+
+
+class ImageView(HomeAssistantView):
+    """Small JPEGs for the board. The board has no HA login: it gets a signed URL (5 min)."""
+
+    url = "/api/perron_studio/img/{key}.jpg"
+    name = "api:perron_studio:img"
+
+    async def get(self, request: web.Request, key: str) -> web.Response:
+        _, d = _ctx(request)
+        jpg = d["engine"].images.get(key)
+        if jpg is None:
+            raise web.HTTPNotFound()
+        return web.Response(body=jpg, content_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
 @callback
 def async_register_views(hass: HomeAssistant) -> None:
-    for view in (MetaView, TilesView, PreviewView, LiveView, ShowView):
+    for view in (MetaView, TilesView, PreviewView, LiveView, ShowView, ImageView, ExternalView):
         hass.http.register_view(view())

@@ -17,7 +17,7 @@ PANEL_JS = "/perron_studio_static/perron-studio-panel.js"
 LIVE_INTERVAL = 2.0           # seconds between live mirror refreshes
 REFRESH_ACTIVE = 600          # re-push active state tiles every 10 min (their ttl is longer)
 
-TEMPLATES = ["hero", "prog", "list", "msg", "kpi", "ring", "img", "agenda", "cv"]
+TEMPLATES = ["hero", "prog", "list", "msg", "kpi", "ring", "img", "agenda", "cv", "json"]
 ZONES = {"f": "Vollbild", "p": "Kachel rechts", "l": "Infozeile"}
 ACCENTS = ["y", "g", "b", "v", "w"]
 ICONS = [

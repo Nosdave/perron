@@ -56,7 +56,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass,
             frontend_url_path=PANEL_URL,
             webcomponent_name="perron-studio-panel",
-            module_url=f"{PANEL_JS}?v=0.1.0",
+            module_url=f"{PANEL_JS}?v=0.2.0",
             sidebar_title="Perron Studio",
             sidebar_icon="mdi:view-dashboard-variant",
             require_admin=True,
@@ -96,10 +96,13 @@ def _register_services(hass: HomeAssistant) -> None:
     async def show(call: ServiceCall) -> None:
         eng = first_engine(hass)
         tile = eng.get(call.data["tile"])
-        if tile is None:
-            raise ServiceValidationError(f"Kachel „{call.data['tile']}“ nicht gefunden")
         z = call.data.get("zone")
-        await eng.async_show(tile, zmap.get(z, z), call.data.get("duration"))
+        z = zmap.get(z, z)
+        if tile is None:  # also the id of a card an automation sends (e.g. "pv")
+            if await eng.async_show_external(call.data["tile"].strip(), z, call.data.get("duration")):
+                return
+            raise ServiceValidationError(f"Kachel „{call.data['tile']}“ nicht gefunden")
+        await eng.async_show(tile, z, call.data.get("duration"))
 
     async def hide(call: ServiceCall) -> None:
         eng = first_engine(hass)

@@ -263,7 +263,7 @@ inline void url_image_store(uint8_t fmt, int w, int h, const std::function<espho
 inline void url_image_done(uint8_t fmt, bool ok, int w, int h) {
   if (ok) return;  // success is handled by url_image_store
   for (auto &s : img_slots())
-    if (s.url && s.url_fmt == fmt) s.ready = false;
+    if (s.url && s.url_fmt == fmt && !s.ready) s.url = false;  // failed: no longer pending (preview stops waiting)
   card_status() = "Bild-URL Fehler";
 }
 

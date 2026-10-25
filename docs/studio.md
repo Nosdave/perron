@@ -45,9 +45,48 @@ data:
   duration: 20
 ```
 
+### Card JSON (advanced)
+
+The template *Karten-JSON* takes the whole card as JSON (fields as in [cards.md](cards.md)) and
+may be a Jinja template. An empty result, `none` or `{"del": 1}` means "no card right now": the
+tile is inactive and its card is removed. The JSON decides `p`, `z`, `s`, `every`/`show`; the tile
+settings only fill what is missing. `p: 0` makes an alarm (full screen until the template is empty
+again).
+
+```jinja
+{% if is_state('sensor.washer', 'in_use') %}
+{"t": "prog", "ti": "Waschen", "ic": "washer", "ac": "v",
+ "val": "{{ states('sensor.washer_remaining') }}'", "pct": {{ states('sensor.washer_progress') | int(0) }}}
+{% endif %}
+```
+
+### Pictures and cameras
+
+For *image* and *doorbell* tiles Home Assistant fetches the picture (camera snapshot, image
+entity, any `entity_picture` or URL), shrinks it to a JPEG of at most 192×192 and lets the board
+download it from a signed URL that is valid for 5 minutes. The board needs no Home Assistant
+login. Home Assistant's *internal URL* must be set (Settings → System → Network).
+
+## Cards from automations
+
+Studio watches every card that other automations send with `esphome.<board>_push_json` and lists
+it in the panel with its last version. It does not change them. *Show* brings the last version to
+the board now (also `perron_studio.show` with the card id as `tile`). *Take over* creates a
+*Karten-JSON* tile from it as a starting point: replace the values with templates, compare
+it with the automation's card, then switch the automation off.
+
+Cards that need actions (calendar events, polling a sensor, waiting for a camera snapshot) stay
+automations; Studio still shows them and can call them up.
+
+## Night
+
+In the board's night window only the doorbell, alarms and cards asked for on demand appear (full
+screen for their duration). The preview always shows the day layout; the panel says when the board
+is in its night window.
+
 ## Security
 
 The board's preview and live endpoints only answer with an access token. The integration
 creates it during setup and hands it to the board over the encrypted ESPHome API; it is stored
 in the config entry and on the board, never shown in the web interface. The board serves one
-request at a time (at least 250 ms apart, at most 1 KB).
+request at a time (at least 250 ms apart, at most 1 KB); the integration queues its requests.

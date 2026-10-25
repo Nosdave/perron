@@ -47,6 +47,7 @@ struct StudioReq {
   volatile bool done = false;
   std::string card, err;
   char zone = 'f';
+  bool night = false;  // board is in its night window (panel/info-line cards are not shown then)
   std::vector<uint8_t> bmp;
 };
 inline StudioReq &studio_req() { static StudioReq r; return r; }
@@ -113,6 +114,7 @@ static bool preview_card(const std::string &json, HaCard &out, std::string &err)
 static void render_with_studio(Display &it, const Fonts &F, const Look &L, const esphome::ESPTime &t) {
   StudioReq &rq = studio_req();
   CaptureDisplay *cap = capture();
+  if (rq.kind && !rq.done) rq.night = in_night(L, t);
   if (rq.kind == 1 && !rq.done) {  // live: draw normally, recording every pixel
     cap->clear();
     cap->fwd = &it;
@@ -126,6 +128,10 @@ static void render_with_studio(Display &it, const Fonts &F, const Look &L, const
   if (rq.kind == 2 && !rq.done) {  // preview: off screen
     HaCard c;
     if (!preview_card(rq.card, c, rq.err)) { rq.bmp.clear(); rq.done = true; return; }
+    if (!c.img.empty()) {  // picture still downloading: HA asks again
+      ImgSlot *is = slot(c.img, false);
+      if (is && !is->ready && is->url) { rq.err = "Bild lädt"; rq.bmp.clear(); rq.done = true; return; }
+    }
     Frame &fr = frame();
     uint32_t now = now_epoch(), ms = esphome::millis();
     cap->fwd = nullptr;
@@ -206,6 +212,7 @@ class StudioHandler : public AsyncWebHandler {
     }
     auto *res = request->beginResponse(200, "image/bmp", rq.bmp.data(), rq.bmp.size());
     res->addHeader("Cache-Control", "no-store");
+    res->addHeader("X-Perron-Night", rq.night ? "1" : "0");
     res->addHeader("Access-Control-Allow-Origin", "*");
     request->send(res);
     xSemaphoreGive(studio_mtx());

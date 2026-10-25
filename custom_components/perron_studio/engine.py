@@ -11,8 +11,13 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Any, Callable
 
+import aiohttp
+
+from homeassistant.components.http.auth import async_sign_path
+from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
 from homeassistant.exceptions import TemplateError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.storage import Store
@@ -27,6 +32,19 @@ _LOGGER = logging.getLogger(__name__)
 ENTITY_RE = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
 ENTITY_IN_TEXT_RE = re.compile(r"\b([a-z_]+\.[a-z0-9_]+)\b")
 DAYS = ["mo", "di", "mi", "do", "fr", "sa", "so"]
+
+
+def _to_board_jpeg(raw: bytes) -> bytes:
+    """Any picture -> RGB JPEG that fits 192x192 (the board decodes it fully in PSRAM)."""
+    import io
+
+    from PIL import Image
+
+    im = Image.open(io.BytesIO(raw))
+    im.thumbnail((192, 192))
+    out = io.BytesIO()
+    im.convert("RGB").save(out, "JPEG", quality=85)
+    return out.getvalue()
 
 
 def new_tile(name: str = "Neue Kachel") -> dict:
@@ -45,6 +63,7 @@ def new_tile(name: str = "Neue Kachel") -> dict:
         "pct": "",
         "text": "",
         "image": "",
+        "card": "",
         "elements": "",
         "cells": [],
         "rows": [],
@@ -68,16 +87,24 @@ class TileEngine:
         self._last_push: dict[str, float] = {}
         self._debounce: dict[str, asyncio.TimerHandle] = {}
         self.listeners: list[Callable[[], None]] = []
+        self.images: dict[str, bytes] = {}           # key -> small JPEG served to the board
+        self._img_sent: dict[str, tuple[str, float]] = {}
+        # cards other automations send to the board (esphome.<device>_push_json), id -> record
+        self.external: dict[str, dict] = {}
+        self._ext_unsub: CALLBACK_TYPE | None = None
+        self._ext_save: asyncio.TimerHandle | None = None
 
     # ------------------------------------------------------------- persistence
     async def async_load(self) -> None:
         data = await self.store.async_load()
         self.tiles = (data or {}).get("tiles", [])
+        self.external = (data or {}).get("external", {})
+        self._ext_unsub = self.hass.bus.async_listen(EVENT_CALL_SERVICE, self._on_service_call)
         self._setup_listeners()
         await self.async_evaluate_all()
 
     async def async_save(self) -> None:
-        await self.store.async_save({"tiles": self.tiles})
+        await self.store.async_save({"tiles": self.tiles, "external": self.external})
         self._setup_listeners()
         await self.async_evaluate_all()
         for cb in self.listeners:
@@ -112,11 +139,69 @@ class TileEngine:
         await self.async_save()
 
     async def async_unload(self) -> None:
+        if self._ext_unsub:
+            self._ext_unsub()
+        if self._ext_save:
+            self._ext_save.cancel()
         for u in self._unsubs:
             u()
         self._unsubs.clear()
         for h in self._debounce.values():
             h.cancel()
+
+    # ------------------------------------------------------------- cards from automations
+    @callback
+    def _on_service_call(self, event: Event) -> None:
+        d = event.data
+        if d.get("domain") != "esphome" or d.get("service") != self.board._service("push_json"):
+            return
+        raw = (d.get("service_data") or {}).get("card")
+        try:
+            card = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
+        except (TypeError, ValueError):
+            return
+        cid = str(card.get("id") or "")
+        if not cid or cid.startswith(("st_", "x_", "__")):  # Studio's own cards
+            return
+        rec = self.external.setdefault(cid, {"id": cid, "count": 0})
+        rec["count"] = rec.get("count", 0) + 1
+        rec["at"] = dt_util.now().isoformat(timespec="seconds")
+        rec["deleted"] = bool(card.get("del"))
+        if not rec["deleted"]:
+            rec["card"] = card
+        if self._ext_save:
+            self._ext_save.cancel()
+        self._ext_save = self.hass.loop.call_later(
+            30, lambda: self.hass.async_create_task(
+                self.store.async_save({"tiles": self.tiles, "external": self.external})))
+        for cb in self.listeners:
+            cb()
+
+    async def async_show_external(self, cid: str, zone: str | None = None, duration: int | None = None) -> bool:
+        """Show the last card an automation sent, now (a copy with its own id)."""
+        rec = self.external.get(cid)
+        if not rec or not rec.get("card"):
+            return False
+        card = {k: v for k, v in rec["card"].items() if k not in ("every", "show", "hold", "ttl", "force")}
+        if card.get("p") == 0:  # an alarm is never asked for: show it as a normal card
+            card.pop("s", None)
+        card["id"] = f"x_{cid}"[:26] + "_abruf"
+        z = zone or (card.get("z") if card.get("z") in ("f", "p", "l") else "f")
+        await self.board.push_card(self.place(card, {"where": {}}, True, z, duration))
+        return True
+
+    def tile_from_external(self, cid: str) -> dict | None:
+        """Starting point for a migration: a JSON tile with the automation's last card."""
+        rec = self.external.get(cid)
+        if not rec or not rec.get("card"):
+            return None
+        card = {k: v for k, v in rec["card"].items() if k != "id"}
+        tile = new_tile(str(card.get("ti") or cid))
+        tile["template"] = "json"
+        tile["card"] = json.dumps(card, ensure_ascii=False, indent=1)
+        tile["where"]["zone"] = card.get("z") if card.get("z") in ("f", "p", "l") else "p"
+        tile["from_automation"] = cid
+        return tile
 
     # ------------------------------------------------------------- field rendering
     def render(self, text: Any) -> str:
@@ -164,6 +249,8 @@ class TileEngine:
     # ------------------------------------------------------------- card JSON
     def build_card(self, tile: dict, card_id: str | None = None) -> dict:
         t = tile.get("template", "hero")
+        if t == "json":  # Profi: the whole card as JSON / template (see docs/cards.md)
+            return self._json_card(tile, card_id or f"st_{tile['id']}")
         card: dict[str, Any] = {"id": card_id or f"st_{tile['id']}", "t": t}
         title = self.render(tile.get("title"))
         if title:
@@ -214,6 +301,26 @@ class TileEngine:
             card["img"] = f"st_{tile['id']}"[:24]
         return card
 
+    def _json_card(self, tile: dict, card_id: str) -> dict:
+        """Template -> card dict. Empty, 'none' or a del -> {} (= no card now, tile inactive)."""
+        txt = self.render(tile.get("card"))
+        if not txt or txt.lower() in ("none", "null", "{}", "false", "[]"):
+            return {}
+        try:
+            card = json.loads(txt)
+        except ValueError:
+            try:  # HA templates often render Python-style dicts
+                import ast
+                card = ast.literal_eval(txt)
+            except (ValueError, SyntaxError):
+                return {"id": card_id, "t": "msg", "ti": "JSON-Fehler", "sub": txt[:60]}
+        if not isinstance(card, dict) or card.get("del"):
+            return {}
+        card = {k: v for k, v in card.items() if k != "id"}
+        card["id"] = card_id
+        card.setdefault("t", "msg")
+        return card
+
     def place(self, card: dict, tile: dict, on_demand: bool = False, zone: str | None = None,
               duration: int | None = None) -> dict:
         where = tile.get("where", {})
@@ -221,10 +328,24 @@ class TileEngine:
         z = zone or where.get("zone", "p")
         dur = int(duration or where.get("duration") or 20)
         if on_demand:
+            for k in ("every", "show", "hold"):
+                card.pop(k, None)
+            if card.get("p") == 0:
+                card.pop("s", None)
             if z == "f":
                 card.update({"p": 1, "z": "f", "hold": max(3, min(30, dur)), "ttl": dur, "force": 1})
             else:
-                card.update({"p": 2 if z == "p" else 3, "z": z, "ttl": dur})
+                # force: at night the board shows on-demand cards full screen for their time
+                card.update({"p": 2 if z == "p" else 3, "z": z, "ttl": dur, "force": 1})
+            return card
+        if tile.get("template") == "json":  # the JSON decides; the tile settings only fill gaps
+            card.setdefault("p", int(where.get("prio") or 2))
+            if card["p"] != 0:
+                card.setdefault("z", z)
+            card["ttl"] = max(int(card.get("ttl") or 0), REFRESH_ACTIVE * 2)
+            if int(when.get("every") or 0) > 0 and "every" not in card:
+                card["every"] = int(when["every"])
+                card["show"] = int(when.get("show") or 10)
             return card
         prio = int(where.get("prio") or 2)
         card.update({"p": max(1, min(3, prio)), "z": z, "ttl": REFRESH_ACTIVE * 2})
@@ -251,22 +372,65 @@ class TileEngine:
         return False
 
     # ------------------------------------------------------------- pushing
-    async def _image_for(self, tile: dict) -> None:
+    async def _image_for(self, tile: dict, max_age: float = 0) -> bool:
+        """Fetch the tile's picture (camera, image entity, any entity_picture or URL), shrink it to a
+        small JPEG and let the board download it from a short-lived signed URL. False if no picture."""
         src = (tile.get("image") or "").strip()
         if not src:
-            return
-        url = src
+            return False
+        key = f"st_{tile['id']}"[:24]
+        now = asyncio.get_running_loop().time()
+        cached = self._img_sent.get(key)
+        if max_age and cached and cached[0] == src and now - cached[1] < max_age:
+            return True
+        raw = await self._fetch_picture(src)
+        if not raw:
+            return False
+        try:
+            jpg = await self.hass.async_add_executor_job(_to_board_jpeg, raw)
+        except Exception as err:  # noqa: BLE001 - broken or unsupported picture
+            _LOGGER.warning("Perron Studio: Bild von %s nicht lesbar (%s)", src, err)
+            return False
+        self.images[key] = jpg
+        try:
+            base = get_url(self.hass, allow_external=False, prefer_external=False)
+        except NoURLAvailableError:
+            _LOGGER.warning("Perron Studio: keine interne HA-URL konfiguriert, Bilder gehen nicht")
+            return False
+        path = async_sign_path(self.hass, f"/api/perron_studio/img/{key}.jpg", timedelta(minutes=5))
+        ok = await self.board.push_image_url(key, base + path)
+        if ok:
+            self._img_sent[key] = (src, now)
+        return ok
+
+    async def _fetch_picture(self, src: str) -> bytes | None:
         if ENTITY_RE.match(src):
+            if src.startswith("camera."):
+                from homeassistant.components.camera import async_get_image
+                try:
+                    return (await async_get_image(self.hass, src, timeout=10)).content
+                except Exception as err:  # noqa: BLE001 - camera offline
+                    _LOGGER.debug("Perron Studio: Kamera %s: %s", src, err)
+                    return None
             st = self.hass.states.get(src)
             pic = st.attributes.get("entity_picture") if st else None
             if not pic:
-                return
-            try:
-                base = get_url(self.hass, allow_external=False, prefer_external=False)
-            except NoURLAvailableError:
-                return
-            url = base + pic
-        await self.board.push_image_url(f"st_{tile['id']}"[:24], url)
+                return None
+            if pic.startswith("/"):
+                try:
+                    pic = get_url(self.hass, allow_external=False, prefer_external=False) + pic
+                except NoURLAvailableError:
+                    return None
+            src = pic
+        if not src.startswith(("http://", "https://")):
+            return None
+        try:
+            session = async_get_clientsession(self.hass)
+            async with session.get(src, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                return await resp.read() if resp.status == 200 else None
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Perron Studio: Bild %s: %s", src, err)
+            return None
 
     async def async_push_state(self, tile: dict, force: bool = False) -> None:
         card = self.place(self.build_card(tile), tile)
@@ -284,8 +448,10 @@ class TileEngine:
         """On demand (voice, button, automation, event trigger)."""
         if tile.get("template") in ("img", "ring"):
             await self._image_for(tile)
-        card = self.place(self.build_card(tile, f"st_{tile['id']}_abruf"), tile, True, zone, duration)
-        await self.board.push_card(card)
+        card = self.build_card(tile, f"st_{tile['id']}_abruf")
+        if not card:
+            return
+        await self.board.push_card(self.place(card, tile, True, zone, duration))
 
     async def async_hide(self, tile: dict) -> None:
         await self.board.delete_card(f"st_{tile['id']}_abruf")
@@ -294,6 +460,8 @@ class TileEngine:
 
     async def async_evaluate(self, tile: dict, force: bool = False) -> None:
         active = self.is_active(tile)
+        if active and tile.get("template") == "json" and not self._json_card(tile, "x"):
+            active = False  # the template says: nothing to show right now
         was = self._active.get(tile["id"], False)
         if active:
             await self.async_push_state(tile, force=force or not was)

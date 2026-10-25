@@ -33,7 +33,7 @@ reason a card was rejected. The **Karten-Demo** button cycles through example ca
 | `ac` | accent colour of icon, title, unit and bar: `y` yellow, `g` green, `b` blue, `v` violet (default: the tag colour) |
 | `ttl` | seconds until the card disappears (0 = until removed) |
 | `hold` | seconds on the full screen for a `p:1` event (3–30, default 15) |
-| `force` | `1` = shown on the full screen even while a departure says "leave now" (cards asked for on demand: voice, button) |
+| `force` | `1` = asked for on demand (voice, button): shown full screen even while a departure says "leave now", and in the night window (any zone, for `ttl` seconds) |
 | `every` `show` | occasional card: kept up to date (long `ttl`) but shown only `show` s (default 10) every `every` s, in its zone (`z:"f"` full screen or panel); 0 = always |
 | `ic` `ti` `val` `u` `sub` `ft` `pct` | icon, title, value, unit, secondary text, footer, percent |
 

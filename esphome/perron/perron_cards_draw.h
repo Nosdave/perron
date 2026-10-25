@@ -550,7 +550,15 @@ static CardView pick_cards(const Frame &fr, uint32_t ms, bool night) {
     if (c.p == 1 && (z == 'e' || z == 'f') && ms - c.since_ms < c.hold * 1000u)
       if (!ev || c.since_ms > ev->since_ms) ev = &c;
   }
-  if (ev && night && ev->t != T_RING) ev = nullptr;  // night: only the doorbell goes full screen
+  // night: only the doorbell and cards asked for on demand (voice, button, Studio) go full screen
+  if (ev && night && ev->t != T_RING && !ev->force) ev = nullptr;
+  if (!ev && night) {  // on demand for the panel or info line: at night shown full screen for its time
+    for (const HaCard *cp : all) {
+      const HaCard &c = *cp;
+      uint32_t secs = c.ttl ? c.ttl : c.hold;
+      if (c.force && ms - c.since_ms < secs * 1000u && (!ev || c.since_ms > ev->since_ms)) ev = &c;
+    }
+  }
   if (ev && (!leave_now || ev->force)) v.full = ev;  // force: asked for on demand
   // 2) rotation slot for z f cards
   if (!v.full && !leave_now && !night) {

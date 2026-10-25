@@ -21,7 +21,7 @@ esphome:
   friendly_name: ${friendly_name}
   project:
     name: nosdave.perron
-    version: "0.5.1"
+    version: "0.5.2"
   on_boot:
     priority: 600
     then:
