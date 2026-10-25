@@ -551,7 +551,7 @@ static CardView pick_cards(const Frame &fr, uint32_t ms, bool night) {
       if (!ev || c.since_ms > ev->since_ms) ev = &c;
   }
   if (ev && night && ev->t != T_RING) ev = nullptr;  // night: only the doorbell goes full screen
-  if (ev && !leave_now) v.full = ev;
+  if (ev && (!leave_now || ev->force)) v.full = ev;  // force: asked for on demand
   // 2) rotation slot for z f cards
   if (!v.full && !leave_now && !night) {
     std::vector<const HaCard *> rot;

@@ -60,6 +60,7 @@ struct HaCard {
   std::string ic, ti, val, u, sub, ft, img;
   int pct = -1;
   bool fb = false;           // img: full bleed 192x64 (max 10 s)
+  bool force = false;        // on demand (voice/button): full screen even while a departure says "leave now"
   char fit = 0;              // image fit: 'c' cover (fill + crop), 'l' letterbox (whole image); 0 = template default
   int fy = 50;               // cover: vertical crop position 0 (top) .. 100 (bottom)
   std::vector<ListRow> rows;
@@ -329,6 +330,7 @@ inline std::string card_json(const std::string &json) {
   c.img = jstr(o["img"], 24);
   c.pct = o["pct"].is<int>() ? std::max(0, std::min(100, o["pct"].as<int>())) : -1;
   c.fb = (o["fb"] | 0) != 0;
+  c.force = (o["force"] | 0) != 0;
   std::string fit = o["fit"] | "";
   c.fit = (fit == "c" || fit == "l") ? fit[0] : 0;
   c.fy = std::max(0, std::min(100, (int) (o["fy"] | 50)));
