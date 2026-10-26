@@ -311,3 +311,42 @@ async def test_min_interval_throttles_fast_sensors(hass, esphome_entry, board_ca
     await hass.services.async_call(DOMAIN, "show", {"tile": "tf"}, blocking=True)
     await hass.async_block_till_done()
     assert _pushes(board_calls)[-1]["id"] == "st_tf_abruf" and _pushes(board_calls)[-1]["val"] == "4"
+
+
+async def test_saving_reloads_only_its_own_automation(hass, esphome_entry, board_calls, config_dir):
+    await _setup(hass, esphome_entry)
+    # another automation that is running (like the doorbell waiting for its snapshot)
+    p = config_dir / "automations.yaml"
+    p.write_text("- id: waiter\n  alias: Waiter\n  triggers: [{trigger: event, event_type: go}]\n"
+                 "  actions: [{delay: 30}, {event: waited}]\n", encoding="utf-8")
+    await hass.services.async_call("automation", "reload", blocking=True)
+    await hass.async_block_till_done()
+    import asyncio
+    hass.bus.async_fire("go")
+    for _ in range(20):  # no block_till_done: it would wait for the 30 s delay
+        await asyncio.sleep(0)
+    assert hass.states.get("automation.waiter").attributes["current"] == 1
+    await _engine(hass).async_upsert({"id": "tr", "name": "Neu", "template": "msg", "text": "x"})
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert hass.states.get("automation.waiter").attributes["current"] == 1  # still running
+    assert "waiter" in p.read_text(encoding="utf-8") and "perron_studio_tr" in p.read_text(encoding="utf-8")
+
+
+async def test_concurrent_write_is_not_lost(config_dir):
+    import os
+    from custom_components.perron_studio.autogen import _update
+    p = config_dir / "automations.yaml"
+    p.write_text("- id: a\n  alias: A\n", encoding="utf-8")
+    tries = []
+
+    def change(data):
+        tries.append(1)
+        if len(tries) == 1:  # someone else saves while we are working
+            p.write_text("- id: a\n  alias: A\n- id: b\n  alias: B (HA-Editor)\n", encoding="utf-8")
+            os.utime(p, ns=(1, 1))
+        return data + [{"id": "perron_studio_x", "alias": "X"}]
+
+    assert _update(str(p), change)
+    text = p.read_text(encoding="utf-8")
+    assert len(tries) == 2 and "B (HA-Editor)" in text and "perron_studio_x" in text

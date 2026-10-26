@@ -33,7 +33,7 @@ ENTITY_RE = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
 ENTITY_IN_TEXT_RE = re.compile(r"\b([a-z_]+\.[a-z0-9_]+)\b")
 DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 DAY_DE = ["mo", "di", "mi", "do", "fr", "sa", "so"]
-_LOCK = asyncio.Lock()
+_LOCK = asyncio.Lock()  # Studio-internal; against other writers see _update()
 
 
 def automation_id(tile: dict) -> str:
@@ -328,11 +328,36 @@ def _read(path: str) -> list:
     return list(data or [])
 
 
-def _write(path: str, data: list) -> None:
-    contents = dump(data)  # before touching the file: a dump error leaves it intact
-    if os.path.isfile(path):
-        shutil.copy2(path, path + ".perron_studio.bak")  # previous version, one step back
-    write_utf8_file_atomic(path, contents)
+def _fingerprint(path: str) -> tuple[float, int] | None:
+    try:
+        st = os.stat(path)
+        return (st.st_mtime_ns, st.st_size)
+    except FileNotFoundError:
+        return None
+
+
+def _update(path: str, change) -> bool:
+    """Read-modify-write of automations.yaml in one go, compare-and-swap style.
+
+    Home Assistant's automation editor keeps its write lock private (an attribute of its view), so
+    it cannot be shared. Instead the file is read, changed and - only if nobody wrote it in the
+    meantime (mtime/size unchanged) - written atomically; otherwise it is read again (3 tries).
+    Returns False if nothing had to change.
+    """
+    for _ in range(3):
+        before = _fingerprint(path)
+        data = list(load_yaml(path) or []) if before else []
+        new = change(data)
+        if new is None:
+            return False
+        contents = dump(new)  # before touching the file: a dump error leaves it intact
+        if _fingerprint(path) != before:
+            continue  # someone (HA editor, API) wrote meanwhile: start over with their version
+        if before:
+            shutil.copy2(path, path + ".perron_studio.bak")  # previous version, one step back
+        write_utf8_file_atomic(path, contents)
+        return True
+    raise HomeAssistantError("automations.yaml wird gerade anderweitig geändert – bitte nochmal speichern")
 
 
 async def async_read(hass: HomeAssistant, auto_id: str) -> dict | None:
@@ -348,17 +373,20 @@ async def async_save(hass: HomeAssistant, cfg: dict, enabled: bool) -> None:
         await async_validate_config_item(hass, cfg["id"], cfg)
     except Exception as err:  # noqa: BLE001 - vol.Invalid / HomeAssistantError
         raise HomeAssistantError(f"Automation ungültig: {err}") from err
-    async with _LOCK:
-        path = _path(hass)
-        data = await hass.async_add_executor_job(_read, path)
+
+    def change(data: list) -> list:
         for i, a in enumerate(data):
             if isinstance(a, dict) and a.get("id") == cfg["id"]:
                 data[i] = cfg
                 break
         else:
             data.append(cfg)
-        await hass.async_add_executor_job(_write, path, data)
-    await hass.services.async_call("automation", "reload", blocking=True)
+        return data
+
+    async with _LOCK:
+        await hass.async_add_executor_job(_update, _path(hass), change)
+    # only this automation (like HA's editor): running ones (doorbell waits etc.) are not interrupted
+    await hass.services.async_call("automation", "reload", {"id": cfg["id"]}, blocking=True)
     ent = er.async_get(hass).async_get_entity_id("automation", "automation", cfg["id"])
     if ent:
         await hass.services.async_call("automation", "turn_on" if enabled else "turn_off",
@@ -366,14 +394,14 @@ async def async_save(hass: HomeAssistant, cfg: dict, enabled: bool) -> None:
 
 
 async def async_remove(hass: HomeAssistant, auto_id: str) -> None:
-    async with _LOCK:
-        path = _path(hass)
-        data = await hass.async_add_executor_job(_read, path)
+    """Delete like HA's editor: drop it from the file, then remove its entity (no reload)."""
+
+    def change(data: list) -> list | None:
         new = [a for a in data if not (isinstance(a, dict) and a.get("id") == auto_id)]
-        if len(new) == len(data):
-            return
-        await hass.async_add_executor_job(_write, path, new)
-    await hass.services.async_call("automation", "reload", blocking=True)
+        return new if len(new) != len(data) else None
+
+    async with _LOCK:
+        await hass.async_add_executor_job(_update, _path(hass), change)
     reg = er.async_get(hass)
     ent = reg.async_get_entity_id("automation", "automation", auto_id)
     if ent:
