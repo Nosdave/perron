@@ -8,12 +8,14 @@ of Perron Studio is needed while it runs.
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
 import os
 import re
 import shutil
+import zlib
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -42,6 +44,51 @@ def automation_id(tile: dict) -> str:
 
 def config_hash(cfg: dict) -> str:
     return hashlib.sha1(json.dumps(cfg, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+# ------------------------------------------------------------------ the tile inside its automation
+# Every Studio automation carries its complete tile (the editor model) in a variable, so a tile can
+# always be loaded back into the Studio - from the automation alone, whatever happened to the
+# Studio's own storage. Compressed + base64: no "{{", so Home Assistant treats it as plain text.
+PAYLOAD_KEY = "perron_studio_kachel"
+
+
+def _encode(obj: dict) -> str:
+    raw = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode()
+    return "v1:" + base64.b64encode(zlib.compress(raw, 9)).decode()
+
+
+def _decode(txt: Any) -> dict | None:
+    if not isinstance(txt, str) or not txt.startswith("v1:"):
+        return None
+    try:
+        return json.loads(zlib.decompress(base64.b64decode(txt[3:])).decode())
+    except (ValueError, zlib.error):
+        return None
+
+
+def _vars_block(cfg: dict) -> dict | None:
+    acts = cfg.get("actions") or cfg.get("action") or []
+    if isinstance(acts, list) and acts and isinstance(acts[0], dict) and isinstance(acts[0].get("variables"), dict):
+        return acts[0]["variables"]
+    return None
+
+
+def _without_payload(cfg: dict) -> dict:
+    c = json.loads(json.dumps(cfg, default=str))
+    v = _vars_block(c)
+    if v is not None:
+        v.pop(PAYLOAD_KEY, None)
+    return c
+
+
+def tile_from_automation(raw: dict) -> tuple[dict | None, bool]:
+    """(tile, edited outside the Studio?) from an automation's configuration."""
+    v = _vars_block(raw or {})
+    data = _decode(v.get(PAYLOAD_KEY)) if v else None
+    if not data or not isinstance(data.get("tile"), dict):
+        return None, True
+    return data["tile"], config_hash(_without_payload(raw)) != data.get("hash")
 
 
 # ------------------------------------------------------------------ field -> template
@@ -293,7 +340,7 @@ def build_automation(hass: HomeAssistant, tile: dict, device: str) -> dict:
             "this.attributes.last_triggered is none or "
             "(now() - this.attributes.last_triggered).total_seconds() >= %d }}" % min_iv)})
 
-    return {
+    cfg = {
         "id": automation_id(tile),
         "alias": f"Perron Studio: {tile.get('name') or tid}",
         "description": "Erstellt mit Perron Studio. Bitte im Studio bearbeiten – dort gibt es die "
@@ -304,6 +351,9 @@ def build_automation(hass: HomeAssistant, tile: dict, device: str) -> dict:
         "conditions": conditions,
         "actions": actions,
     }
+    clean = {k: v for k, v in tile.items() if not k.startswith("_")}
+    actions[0]["variables"][PAYLOAD_KEY] = _encode({"tile": clean, "hash": config_hash(cfg)})
+    return cfg
 
 
 def _strip_braces(t: str) -> str:

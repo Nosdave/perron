@@ -56,7 +56,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass,
             frontend_url_path=PANEL_URL,
             webcomponent_name="perron-studio-panel",
-            module_url=f"{PANEL_JS}?v=0.3.1",
+            module_url=f"{PANEL_JS}?v=0.3.2",
             sidebar_title="Perron Studio",
             sidebar_icon="mdi:view-dashboard-variant",
             require_admin=True,

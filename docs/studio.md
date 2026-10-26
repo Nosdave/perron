@@ -34,7 +34,10 @@ The board firmware needs version 0.5 or later (endpoints `/perron/screen.bmp`, `
 
 ## Tiles
 
-A new tile is a draft until it is saved; then its automation exists. Switching a tile off switches
+A new tile is a draft until it is saved; then its automation exists. The automation carries the
+complete tile (variable `perron_studio_kachel`, compressed), and the Studio reads its saved tiles
+from there: every saved tile can always be loaded back for editing, even after reinstalling the
+Studio or restoring a backup. Only unsaved drafts live in the Studio's own storage. Switching a tile off switches
 its automation off. Deleting a tile removes its automation.
 
 * **Content** – template (number, key figures, list, progress, text, agenda, doorbell, image,

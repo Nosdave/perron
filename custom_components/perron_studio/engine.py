@@ -81,7 +81,8 @@ class TileEngine:
         self.hass = hass
         self.board = board
         self.store: Store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry_id}")
-        self.tiles: list[dict] = []      # editor model; each tile is saved as an automation
+        # drafts only: a saved tile lives in its automation (autogen.PAYLOAD_KEY) and is read from there
+        self.drafts: list[dict] = []
         self.listeners: list[Callable[[], None]] = []
         self.images: dict[str, bytes] = {}           # key -> small JPEG served to the board
         self._img_sent: dict[str, tuple[str, float]] = {}
@@ -93,14 +94,50 @@ class TileEngine:
     # ------------------------------------------------------------- persistence
     async def async_load(self) -> None:
         data = await self.store.async_load()
-        self.tiles = (data or {}).get("tiles", [])
+        # 0.3.x kept saved tiles here too; they come from their automations now. A tile whose
+        # automation is gone stays as a draft, so nothing is lost.
+        self.drafts = [t for t in (data or {}).get("tiles", []) if not self._saved_raw(t["id"])]
+        for t in self.drafts:
+            t.pop("_hash", None)
         self.external = (data or {}).get("external", {})
         self._ext_unsub = self.hass.bus.async_listen(EVENT_CALL_SERVICE, self._on_service_call)
 
     async def async_save(self) -> None:
-        await self.store.async_save({"tiles": self.tiles, "external": self.external})
+        await self.store.async_save({"tiles": self.drafts, "external": self.external})
         for cb in self.listeners:
             cb()
+
+    # ------------------------------------------------------------- tiles = automations + drafts
+    def _automations(self) -> list:
+        comp = self.hass.data.get("automation")
+        return list(getattr(comp, "entities", []) or []) if comp else []
+
+    def _saved_raw(self, tile_id: str) -> dict | None:
+        aid = f"{autogen.ID_PREFIX}{tile_id}"
+        for ent in self._automations():
+            raw = getattr(ent, "raw_config", None)
+            if raw and raw.get("id") == aid:
+                return dict(raw)
+        return None
+
+    @property
+    def tiles(self) -> list[dict]:
+        """All tiles: every Studio automation (loaded back from itself) plus the drafts."""
+        out: list[dict] = []
+        for ent in self._automations():
+            raw = getattr(ent, "raw_config", None)
+            aid = str((raw or {}).get("id") or "")
+            if not aid.startswith(autogen.ID_PREFIX):
+                continue
+            tile, _ = autogen.tile_from_automation(dict(raw))
+            if tile is None:  # Studio automation without tile data (e.g. hand-made): show it anyway
+                tile = new_tile(str(raw.get("alias") or aid))
+                tile["id"] = aid[len(autogen.ID_PREFIX):]
+                tile["_orphan"] = True
+            out.append(tile)
+        ids = {t["id"] for t in out}
+        out += [t for t in self.drafts if t["id"] not in ids]
+        return sorted(out, key=lambda t: (t.get("name") or "").lower())
 
     def get(self, tile_id_or_name: str) -> dict | None:
         key = (tile_id_or_name or "").strip().lower()
@@ -115,24 +152,18 @@ class TileEngine:
         base["when"] = {**new_tile()["when"], **(tile.get("when") or {})}
         base["where"] = {**new_tile()["where"], **(tile.get("where") or {})}
         base = {k: v for k, v in base.items() if not k.startswith("_")}
-        if write:  # the tile becomes (or updates) an ordinary HA automation
+        if write:  # the tile becomes (or updates) an ordinary HA automation, which carries the tile
             cfg = autogen.build_automation(self.hass, base, self.board.device)
             await autogen.async_save(self.hass, cfg, base.get("enabled", True))
-            base["_hash"] = autogen.config_hash(cfg)
-        for i, t in enumerate(self.tiles):
-            if t["id"] == base["id"]:
-                if not write and "_hash" in t:
-                    base["_hash"] = t["_hash"]
-                self.tiles[i] = base
-                break
+            self.drafts = [t for t in self.drafts if t["id"] != base["id"]]
         else:
-            self.tiles.append(base)
+            self.drafts = [t for t in self.drafts if t["id"] != base["id"]] + [base]
         await self.async_save()
         return base
 
     async def async_delete(self, tile_id: str) -> None:
         tile = next((t for t in self.tiles if t["id"] == tile_id), None)
-        self.tiles = [t for t in self.tiles if t["id"] != tile_id]
+        self.drafts = [t for t in self.drafts if t["id"] != tile_id]
         if tile:
             await autogen.async_remove(self.hass, autogen.automation_id(tile))
             await self.async_hide(tile)
@@ -149,7 +180,7 @@ class TileEngine:
         comp = self.hass.data.get("automation")
         if ent and comp and hasattr(comp, "get_entity"):
             raw = getattr(comp.get_entity(ent), "raw_config", None)
-        modified = bool(raw and tile.get("_hash") and autogen.config_hash(dict(raw)) != tile["_hash"])
+        modified = bool(raw) and autogen.tile_from_automation(dict(raw))[1]
         return {"automation": ent, "config_id": aid, "on": bool(st and st.state == "on"),
                 "saved": bool(ent), "modified": modified,
                 "last_triggered": str((st.attributes.get("last_triggered") if st else "") or "")[:16].replace("T", " ")}
@@ -187,7 +218,7 @@ class TileEngine:
             self._ext_save.cancel()
         self._ext_save = self.hass.loop.call_later(
             30, lambda: self.hass.async_create_task(
-                self.store.async_save({"tiles": self.tiles, "external": self.external})))
+                self.store.async_save({"tiles": self.drafts, "external": self.external})))
         for cb in self.listeners:
             cb()
 

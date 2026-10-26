@@ -350,3 +350,38 @@ async def test_concurrent_write_is_not_lost(config_dir):
     assert _update(str(p), change)
     text = p.read_text(encoding="utf-8")
     assert len(tries) == 2 and "B (HA-Editor)" in text and "perron_studio_x" in text
+
+
+async def test_tiles_load_back_from_their_automations(hass, esphome_entry, board_calls, config_dir):
+    """Studio storage lost (reinstall, restore): every saved tile comes back from its automation."""
+    await _setup(hass, esphome_entry)
+    engine = _engine(hass)
+    tile = {"id": "tk", "name": "Energie", "template": "kpi", "title": "Energie {{ 1 + 1 }}", "accent": "y",
+            "cells": [{"label": "PV", "value": "{{ states('sensor.pv') }}", "unit": "kW", "icon": "sun"}],
+            "when": {"mode": "condition", "condition": "{{ is_state('sun.sun','above_horizon') }}"},
+            "where": {"zone": "f", "duration": 25}}
+    await engine.async_upsert(tile)
+    await engine.async_upsert({"id": "tdraft", "name": "Entwurf"}, write=False)
+    await hass.async_block_till_done()
+    assert "perron_studio_kachel: v1:" in (config_dir / "automations.yaml").read_text(encoding="utf-8")
+
+    # wipe the Studio completely: config entry gone, storage gone
+    entry_id = hass.config_entries.async_entries(DOMAIN)[0].entry_id
+    await hass.config_entries.async_remove(entry_id)
+    await hass.async_block_till_done()
+    for f in (config_dir / ".storage").glob("perron_studio*"):
+        f.unlink()
+    await _setup(hass, esphome_entry)
+    engine = _engine(hass)
+    back = engine.get("tk")
+    assert back is not None and back["cells"][0]["value"] == "{{ states('sensor.pv') }}"
+    assert back["title"] == "Energie {{ 1 + 1 }}" and back["when"]["mode"] == "condition"
+    assert back["where"]["duration"] == 25
+    st = engine.status(back)
+    assert st["saved"] and not st["modified"]
+    # edit it again in the Studio: same automation, still loadable
+    back["title"] = "Strom"
+    await engine.async_upsert(back)
+    await hass.async_block_till_done()
+    assert engine.get("tk")["title"] == "Strom"
+    assert (config_dir / "automations.yaml").read_text(encoding="utf-8").count("perron_studio_tk") == 1
