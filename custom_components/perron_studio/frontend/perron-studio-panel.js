@@ -286,6 +286,8 @@ class PerronStudioPanel extends HTMLElement {
   _statusChips(t) {
     const st = t._status || {};
     if (!st.saved) return '<span class="chip">Entwurf – noch keine Automation</span>';
+    if (t._rebuilt) return '<span class="chip" style="color:var(--warning-color,#e8a33c)">aus der Automation wiederhergestellt – bitte prüfen und einmal speichern</span>'
+      + `<a class="chip" href="/config/automation/edit/${encodeURIComponent(st.config_id)}" target="_top">in HA öffnen</a>`;
     return `<span class="chip">Automation ${st.on ? "an" : "aus"}</span>`
       + (st.modified ? '<span class="chip" style="color:var(--error-color)">in HA geändert</span>' : "")
       + `<a class="chip" href="/config/automation/edit/${encodeURIComponent(st.config_id)}" target="_top">in HA öffnen</a>`;

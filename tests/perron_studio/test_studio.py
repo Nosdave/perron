@@ -385,3 +385,31 @@ async def test_tiles_load_back_from_their_automations(hass, esphome_entry, board
     await hass.async_block_till_done()
     assert engine.get("tk")["title"] == "Strom"
     assert (config_dir / "automations.yaml").read_text(encoding="utf-8").count("perron_studio_tk") == 1
+
+
+async def test_tile_saved_by_031_is_rebuilt_from_its_automation(hass, esphome_entry, board_calls, config_dir):
+    """0.3.0/0.3.1 wrote automations without tile data: the tile is read back from the automation."""
+    import re as _re
+    await _setup(hass, esphome_entry)
+    engine = _engine(hass)
+    await engine.async_upsert({"id": "tv", "name": "Volt Wetter Kachel", "template": "hero", "title": "Wetter",
+                               "value": "sensor.temp", "unit": "°C", "sub1": "{{ states('sensor.r') }} mm",
+                               "icon": "sun", "accent": "y",
+                               "when": {"mode": "condition", "condition": "{{ is_state('sun.sun','above_horizon') }}",
+                                        "min_interval": 60}, "where": {"zone": "f", "duration": 25}})
+    await hass.async_block_till_done()
+    p = config_dir / "automations.yaml"  # make it look like 0.3.1 wrote it, Studio storage lost
+    p.write_text(_re.sub(r"\n +perron_studio_kachel: v1:\S+", "", p.read_text(encoding="utf-8")), encoding="utf-8")
+    await hass.services.async_call("automation", "reload", blocking=True)
+    engine.drafts = []
+    await hass.async_block_till_done()
+    t = engine.get("tv")
+    assert t["_rebuilt"] and t["name"] == "Volt Wetter Kachel" and t["template"] == "hero"
+    assert t["value"] == "sensor.temp" and t["sub1"] == "{{ states('sensor.r') }} mm" and t["accent"] == "y"
+    assert t["when"]["mode"] == "condition" and t["when"]["min_interval"] == 60
+    assert t["when"]["condition"] == "{{ is_state('sun.sun','above_horizon') }}"
+    assert t["where"]["zone"] == "f" and t["where"]["duration"] == 25
+    await engine.async_upsert({k: v for k, v in t.items() if not k.startswith("_")})  # save once
+    await hass.async_block_till_done()
+    t2 = engine.get("tv")
+    assert not t2.get("_rebuilt") and "perron_studio_kachel: v1:" in p.read_text(encoding="utf-8")

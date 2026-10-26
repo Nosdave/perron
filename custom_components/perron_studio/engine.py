@@ -130,6 +130,16 @@ class TileEngine:
             if not aid.startswith(autogen.ID_PREFIX):
                 continue
             tile, _ = autogen.tile_from_automation(dict(raw))
+            if tile is None:  # saved by Studio 0.3.0/0.3.1: read the tile back from the automation
+                tile = autogen.reconstruct_tile(dict(raw))
+                if tile is not None:
+                    base = new_tile(tile.get("name") or aid)
+                    base.update({k: v for k, v in tile.items() if k not in ("when", "where")})
+                    base["when"] = {**base["when"], **tile.get("when", {})}
+                    base["where"] = {**base["where"], **tile.get("where", {})}
+                    base["enabled"] = getattr(ent, "is_on", True)
+                    base["_rebuilt"] = True
+                    tile = base
             if tile is None:  # Studio automation without tile data (e.g. hand-made): show it anyway
                 tile = new_tile(str(raw.get("alias") or aid))
                 tile["id"] = aid[len(autogen.ID_PREFIX):]

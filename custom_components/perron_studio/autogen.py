@@ -82,6 +82,136 @@ def _without_payload(cfg: dict) -> dict:
     return c
 
 
+# ------------------------------------------------------------------ automations from Studio 0.3.0/0.3.1
+_STATES_RE = re.compile(r"^\{\{ states\('([a-z_]+\.[a-z0-9_]+)'\) \}\}$")
+_PIC_RE = re.compile(r"state_attr\('([a-z_]+\.[a-z0-9_]+)', 'entity_picture'\)")
+
+
+def reconstruct_tile(raw: dict) -> dict | None:
+    """Tile from an automation that 0.3.0/0.3.1 generated (no tile data inside yet).
+
+    The generated automation contains every field (as variables) and every setting (triggers,
+    conditions, placement), so the tile can be read back from it. Returns None if it does not look
+    like a Studio automation.
+    """
+    aid = str(raw.get("id") or "")
+    v = _vars_block(raw)
+    if not aid.startswith(ID_PREFIX) or v is None or "body" not in v:
+        return None
+
+    def f(name: str) -> str:
+        x = v.get(name, "")
+        x = "" if x is None else str(x)
+        m = _STATES_RE.match(x.strip())
+        return m.group(1) if m else x
+
+    tid = aid[len(ID_PREFIX):]
+    alias = str(raw.get("alias") or tid)
+    name = alias[len("Perron Studio: "):] if alias.startswith("Perron Studio: ") else alias
+    body = str(v.get("body") or "")
+    tile: dict[str, Any] = {"id": tid, "name": name}
+    m = re.match(r"\{\{ \{'t': \"([a-z]+)\"", body)
+    if not m:  # Karten-JSON: the body variable is the user's template itself
+        tile["template"] = "json"
+        tile["card"] = body
+    else:
+        t = tile["template"] = m.group(1)
+        tile["title"] = f("v_ti")
+        for key, field in (("ic", "icon"), ("ac", "accent")):
+            mm = re.search(r"'%s': \"([^\"]*)\"" % key, body)
+            tile[field] = mm.group(1) if mm else ("w" if field == "accent" else "")
+        tile["sub1"], tile["sub2"] = f("v_sub1"), f("v_sub2")
+        if t in ("hero", "prog"):
+            tile["value"], tile["unit"] = f("v_val"), f("v_u")
+        if t == "prog":
+            tile["pct"] = f("v_pct")
+        if t == "msg":
+            tile["text"] = f("v_text")
+        if t == "cv":
+            tile["elements"] = f("v_el")
+        if t == "kpi":
+            cells = []
+            for i, cm in enumerate(re.finditer(r"\[\(v_c(\d)label \| string\), .*?, \"([a-z]*)\", .*?, \(v_c\1sub \| string\), \"([a-z0-9-]*)\"\]", body)):
+                k = cm.group(1)
+                cells.append({"label": f(f"v_c{k}label"), "value": f(f"v_c{k}value"), "unit": f(f"v_c{k}unit"),
+                              "color": cm.group(2), "pct": f(f"v_c{k}pct"), "sub": f(f"v_c{k}sub"), "icon": cm.group(3)})
+            tile["cells"] = cells
+        if t in ("list", "agenda"):
+            tile["rows"] = [{"icon": rm.group(1), "label": f(f"v_r{rm.group(2)}label"), "value": f(f"v_r{rm.group(2)}value"),
+                             "color": rm.group(3)}
+                            for rm in re.finditer(r"\[\"([a-z0-9-]*)\", \(v_r(\d)label \| string\), \(v_r\2value \| string\), \"([a-z]*)\"\]", body)]
+
+    acts = raw.get("actions") or raw.get("action") or []
+    txt = json.dumps(acts, ensure_ascii=False)
+    pm = _PIC_RE.search(txt)
+    if pm:
+        tile["image"] = pm.group(1)
+    else:
+        um = re.search(r'"url": "(https?://[^"]+)"', txt)
+        if um and "{{" not in um.group(1):
+            tile["image"] = um.group(1)
+
+    # where
+    where: dict[str, Any] = {}
+    zm = re.search(r'\*\*\{\\"z\\": \\"([fpl])\\", \\"p\\": (\d)', txt) or re.search(r'dict\(\{\\"z\\": \\"([fpl])\\", \\"p\\": (\d)', txt)
+    if zm:
+        where["zone"], where["prio"] = zm.group(1), int(zm.group(2))
+    else:
+        oz = re.search(r"else \\\"([fpl])\\\" \}\}", json.dumps(v.get("od_zone", "")))
+        if oz:
+            where["zone"] = oz.group(1)
+    dm = re.search(r"else (\d+) \}\}", str(v.get("od_dur") or ""))
+    if dm:
+        where["duration"] = int(dm.group(1))
+    tile["where"] = where
+
+    # when
+    when: dict[str, Any] = {"events": [], "min_interval": 0}
+    trig = raw.get("triggers") or raw.get("trigger") or []
+    for t in trig:
+        if t.get("id") == "show" and t.get("trigger", t.get("platform")) == "state":
+            when["events"].append({"entity": t.get("entity_id") if isinstance(t.get("entity_id"), str)
+                                   else (t.get("entity_id") or [""])[0], "to": t.get("to", "")})
+    has_state = any(t.get("id") == "state" for t in trig)
+    for c in raw.get("conditions") or raw.get("condition") or []:
+        mm = re.search(r">= (\d+) \}\}$", str(c.get("value_template") or ""))
+        if mm:
+            when["min_interval"] = int(mm.group(1))
+    em = re.search(r'\\"every\\": (\d+), \\"show\\": (\d+)', txt)
+    if em:
+        when["every"], when["show"] = int(em.group(1)), int(em.group(2))
+    cond = ""
+    for c in (acts[1].get("choose") or [])[1:2] if len(acts) > 1 and isinstance(acts[1], dict) else []:
+        conds = c.get("conditions") or []
+        cond = str(conds[0].get("value_template") or "") if conds else ""
+    if tile.get("template") == "json":
+        jm = re.match(r"\{\{ \((.*)\) and \(body is mapping\) and not body.get\('del'\) \}\}$", cond, re.S)
+        cond = "{{ %s }}" % jm.group(1) if jm else cond
+    if not has_state:
+        when["mode"] = "manual"
+    elif cond.replace(" ", "") in ("{{true}}",):
+        when["mode"] = "always"
+    elif "now().strftime" in cond:
+        when["mode"] = "schedule"
+        days = re.search(r"in \[([^\]]*)\]", cond)
+        if days:
+            keys = [d.strip(" '\"") for d in days.group(1).split(",") if d.strip()]
+            idx = [DAY_KEYS.index(k) for k in keys if k in DAY_KEYS]
+            names = [DAY_DE[i].capitalize() for i in idx]
+            run = len(idx) >= 3 and all((idx[j + 1] - idx[j]) % 7 == 1 for j in range(len(idx) - 1))
+            when["days"] = f"{names[0]}-{names[-1]}" if run else ",".join(names)
+        else:
+            when["days"] = "täglich"
+        tm = re.search(r">= \"(\d\d:\d\d)\" and now\(\).strftime\('%H:%M'\) < \"(\d\d:\d\d)\"", cond)
+        if tm:
+            when["from"], when["to"] = tm.group(1), tm.group(2)
+    else:
+        when["mode"] = "condition"
+        when["condition"] = cond
+    tile["when"] = when
+    return tile
+
+
 def tile_from_automation(raw: dict) -> tuple[dict | None, bool]:
     """(tile, edited outside the Studio?) from an automation's configuration."""
     v = _vars_block(raw or {})
