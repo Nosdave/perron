@@ -202,3 +202,28 @@ async def test_image_signed_url_and_view(hass, esphome_entry, board_calls, hass_
     assert r.status == 200 and r.headers["Content-Type"] == "image/jpeg"
     r = await client.get("/api/perron_studio/img/st_tcam.jpg")
     assert r.status == 401
+
+
+async def test_automations_overview(hass, esphome_entry, board_calls, hass_client):
+    await _setup(hass, esphome_entry)
+    assert await async_setup_component(hass, "automation", {"automation": [{
+        "id": "perron_karte_pv", "alias": "Karte Energie",
+        "triggers": [{"trigger": "event", "event_type": "go", "id": "tick"}],
+        "actions": [{"action": "esphome.perron_push_json",
+                     "data": {"card": "{{ {'id': 'pv', 't': 'kpi', 'ti': 'Energie'} | to_json }}"}}],
+    }, {"id": "other", "alias": "Licht", "triggers": [{"trigger": "event", "event_type": "x"}],
+        "actions": [{"action": "esphome.perron_set_studio_token", "data": {"token": "x"}}]}]})
+    await hass.async_block_till_done()
+    engine = next(v for k, v in hass.data[DOMAIN].items() if not k.startswith("_"))["engine"]
+    ov = engine.automations_overview()
+    assert [a["name"] for a in ov] == ["Karte Energie", "Licht"] or [a["name"] for a in ov] == ["Karte Energie"]
+    pv = next(a for a in ov if a["name"] == "Karte Energie")
+    assert pv["ids"] == ["pv"] and pv["on"]
+    hass.bus.async_fire("go")
+    await hass.async_block_till_done()
+    assert engine.external["pv"]["card"]["ti"] == "Energie"
+    assert engine.external["pv"].get("automation") == "automation.karte_energie"
+    client = await hass_client()
+    r = await client.get("/api/perron_studio/external")
+    body = await r.json()
+    assert body["cards"][0]["id"] == "pv" and body["automations"][0]["ids"] == ["pv"]

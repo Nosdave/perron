@@ -19,6 +19,7 @@ class PerronStudioPanel extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this.tiles = [];
     this.external = [];      // cards that automations send to the board
+    this.autos = [];         // automations that send cards (from their configuration)
     this.meta = null;
     this.edit = null;        // tile being edited (copy)
     this.zone = "f";         // preview zone
@@ -43,12 +44,53 @@ class PerronStudioPanel extends HTMLElement {
     try {
       this.meta = await this._hass.callApi("GET", "perron_studio/meta");
       this.tiles = await this._hass.callApi("GET", "perron_studio/tiles");
-      this.external = await this._hass.callApi("GET", "perron_studio/external");
+      await this._loadExternal();
     } catch (e) {
       this._toast("Perron Studio nicht erreichbar: " + (e.message || e));
     }
     this._renderList();
     this._startLive();
+  }
+
+  async _loadExternal() {
+    const x = await this._hass.callApi("GET", "perron_studio/external");
+    this.external = x.cards || [];
+    this.autos = x.automations || [];
+  }
+
+  _extRow(x, id) {
+    if (!x) {
+      return `<tr><td></td><td><span class="chip">id ${esc(id)}</span></td><td colspan="3" class="hint">noch nicht gesehen – erscheint, sobald die Automation diese Karte schickt</td></tr>`;
+    }
+    return `
+    <tr>
+      <td><img data-xthumb="${esc(x.id)}" alt=""></td>
+      <td><b>${esc((x.card || {}).ti || x.id)}</b><br><span class="chip">id ${esc(x.id)}</span><span class="chip">${esc(TPL[(x.card || {}).t] || (x.card || {}).t || "")}</span></td>
+      <td>${esc((x.at || "").replace("T", " ").slice(0, 16))}<br><span class="hint">${x.count || 0}× gesendet</span></td>
+      <td>${x.deleted ? '<span class="chip">gerade aus</span>' : '<span class="chip">auf der Tafel</span>'}${x.taken ? '<span class="chip">als Kachel übernommen</span>' : ""}</td>
+      <td><div class="acts">${x.card ? `<button class="ghost" data-xshow="${esc(x.id)}">Zeigen</button>` : ""}
+        ${x.card && !x.taken ? `<button data-ximport="${esc(x.id)}">Übernehmen</button>` : ""}</div></td>
+    </tr>`;
+  }
+
+  _extSection() {
+    const byId = Object.fromEntries(this.external.map((x) => [x.id, x]));
+    const used = new Set();
+    let h = "";
+    for (const a of this.autos) {
+      const ids = a.ids.length ? a.ids : [];
+      ids.forEach((i) => used.add(i));
+      h += `<tr><td colspan="5" style="background:var(--secondary-background-color)"><b>${esc(a.name)}</b>
+        <span class="chip">${a.on ? "an" : "aus"}</span>${a.last_triggered ? `<span class="hint">zuletzt ${esc(a.last_triggered)}</span>` : ""}</td></tr>`;
+      h += ids.length ? ids.map((i) => this._extRow(byId[i], i)).join("")
+        : '<tr><td></td><td colspan="4" class="hint">Karten-id per Template – erscheint beim ersten Senden</td></tr>';
+    }
+    const rest = this.external.filter((x) => !used.has(x.id));
+    if (rest.length) {
+      h += `<tr><td colspan="5" style="background:var(--secondary-background-color)"><b>Weitere gesehene Karten</b></td></tr>`;
+      h += rest.map((x) => this._extRow(x, x.id)).join("");
+    }
+    return h;
   }
 
   // ------------------------------------------------------------------ helpers
@@ -179,22 +221,12 @@ class PerronStudioPanel extends HTMLElement {
   </table>
 </section>
 <section class="card">
-  <h2>Karten aus Automationen <span class="chip">${this.external.length}</span></h2>
-  <p class="hint">Karten, die bestehende Automationen an die Tafel schicken – Studio sieht sie mit, ändert aber nichts.
+  <h2>Karten aus Automationen <span class="chip">${this.autos.length} Automationen · ${this.external.length} Karten gesehen</span></h2>
+  <p class="hint">Automationen, die Karten an die Tafel schicken – Studio liest sie mit, ändert aber nichts.
   „Zeigen“ holt die letzte Fassung jetzt auf die Tafel (auch per <code>perron_studio.show</code> mit der Karten-id).
   „Übernehmen“ legt eine Kachel „Karten-JSON“ als Startpunkt an; die Automation läuft weiter, bis du sie abschaltest.</p>
-  ${this.external.length ? "" : '<p class="hint">Noch keine gesehen – erscheinen, sobald eine Automation eine Karte schickt.</p>'}
-  <table>${this.external.length ? "<tr><th>Letzte Fassung</th><th>Karte</th><th>Zuletzt</th><th>Status</th><th></th></tr>" : ""}
-  ${this.external.map((x) => `
-    <tr>
-      <td><img data-xthumb="${esc(x.id)}" alt=""></td>
-      <td><b>${esc((x.card || {}).ti || x.id)}</b><br><span class="chip">id ${esc(x.id)}</span><span class="chip">${esc(TPL[(x.card || {}).t] || (x.card || {}).t || "")}</span></td>
-      <td>${esc((x.at || "").replace("T", " ").slice(0, 16))}<br><span class="hint">${x.count || 0}× gesendet</span></td>
-      <td>${x.deleted ? '<span class="chip">gerade aus</span>' : '<span class="chip">auf der Tafel</span>'}${x.taken ? '<span class="chip">als Kachel übernommen</span>' : ""}</td>
-      <td><div class="acts">${x.card ? `<button class="ghost" data-xshow="${esc(x.id)}">Zeigen</button>` : ""}
-        ${x.card && !x.taken ? `<button data-ximport="${esc(x.id)}">Übernehmen</button>` : ""}</div></td>
-    </tr>`).join("")}
-  </table>
+  ${this.autos.length || this.external.length ? "" : '<p class="hint">Keine gefunden.</p>'}
+  <table>${this._extSection()}</table>
 </section>`;
     main.querySelectorAll("[data-xshow]").forEach((el) => (el.onclick = async () => {
       try {
@@ -206,7 +238,7 @@ class PerronStudioPanel extends HTMLElement {
       try {
         const t = await this._hass.callApi("POST", "perron_studio/external", { action: "import", id: el.dataset.ximport });
         this.tiles = await this._hass.callApi("GET", "perron_studio/tiles");
-        this.external = await this._hass.callApi("GET", "perron_studio/external");
+        await this._loadExternal();
         this._open(t.id);
       } catch (e) { this._toast("Fehler: " + (e.message || e)); }
     }));

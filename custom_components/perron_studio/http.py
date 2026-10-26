@@ -152,11 +152,11 @@ class ExternalView(HomeAssistantView):
         _admin(request)
         _, d = _ctx(request)
         eng = d["engine"]
-        out = []
+        cards = []
         for cid, rec in sorted(eng.external.items(), key=lambda kv: kv[1].get("at", ""), reverse=True):
-            out.append({**rec, "tile": eng.tile_from_external(cid),
-                        "taken": any(t.get("from_automation") == cid for t in eng.tiles)})
-        return self.json(out)
+            cards.append({**rec, "tile": eng.tile_from_external(cid),
+                          "taken": any(t.get("from_automation") == cid for t in eng.tiles)})
+        return self.json({"cards": cards, "automations": eng.automations_overview()})
 
     async def post(self, request: web.Request) -> web.Response:
         _admin(request)

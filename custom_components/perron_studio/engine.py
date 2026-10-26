@@ -30,6 +30,7 @@ from .const import REFRESH_ACTIVE, STORAGE_KEY, STORAGE_VERSION
 _LOGGER = logging.getLogger(__name__)
 
 ENTITY_RE = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
+CARD_ID_RE = re.compile(r"[\"']id[\"']\s*:\s*[\"']([a-z0-9_]{2,32})[\"']")
 ENTITY_IN_TEXT_RE = re.compile(r"\b([a-z_]+\.[a-z0-9_]+)\b")
 DAYS = ["mo", "di", "mi", "do", "fr", "sa", "so"]
 
@@ -168,6 +169,9 @@ class TileEngine:
         rec["count"] = rec.get("count", 0) + 1
         rec["at"] = dt_util.now().isoformat(timespec="seconds")
         rec["deleted"] = bool(card.get("del"))
+        auto = self._automation_of(event)
+        if auto:
+            rec["automation"] = auto
         if not rec["deleted"]:
             rec["card"] = card
         if self._ext_save:
@@ -177,6 +181,53 @@ class TileEngine:
                 self.store.async_save({"tiles": self.tiles, "external": self.external})))
         for cb in self.listeners:
             cb()
+
+    def automations_overview(self) -> list[dict]:
+        """All automations that send cards to this board (from their configuration), with the
+        card ids they mention, so the panel lists them before they have sent anything."""
+        comp = self.hass.data.get("automation")
+        prefix = f"esphome.{self.board.device}_"
+        out = []
+        for st in self.hass.states.async_all("automation"):
+            ent = comp.get_entity(st.entity_id) if comp and hasattr(comp, "get_entity") else None
+            raw = getattr(ent, "raw_config", None)
+            if not raw:
+                continue
+            txt = json.dumps(raw, ensure_ascii=False, default=str)
+            if prefix not in txt:
+                continue
+            not_cards = {str(raw.get("id") or "")}  # the automation's own id and its trigger ids
+            for trg in raw.get("triggers") or raw.get("trigger") or []:
+                if isinstance(trg, dict) and trg.get("id"):
+                    not_cards.add(str(trg["id"]))
+            ids = []
+            for m in CARD_ID_RE.findall(txt):
+                if m not in ids and m not in not_cards:
+                    ids.append(m)
+            for cid, rec in self.external.items():  # ids seen at runtime (templated ids)
+                if rec.get("automation") == st.entity_id and cid not in ids:
+                    ids.append(cid)
+            out.append({
+                "entity_id": st.entity_id,
+                "name": st.attributes.get("friendly_name") or st.entity_id,
+                "on": st.state == "on",
+                "last_triggered": str(st.attributes.get("last_triggered") or "")[:16].replace("T", " "),
+                "ids": ids,
+            })
+        return sorted(out, key=lambda a: a["name"].lower())
+
+    def _automation_of(self, event: Event) -> str | None:
+        """The automation whose run made this service call (context parent chain)."""
+        comp = self.hass.data.get("automation")
+        if not comp or not hasattr(comp, "entities"):
+            return None
+        ctx = event.context
+        ids = {ctx.id, ctx.parent_id}
+        for ent in comp.entities:
+            run_ctx = getattr(ent, "_context", None) or getattr(ent, "context", None)
+            if run_ctx is not None and getattr(run_ctx, "id", None) in ids:
+                return ent.entity_id
+        return None
 
     async def async_show_external(self, cid: str, zone: str | None = None, duration: int | None = None) -> bool:
         """Show the last card an automation sent, now (a copy with its own id)."""
