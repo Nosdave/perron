@@ -120,7 +120,7 @@ class TileEngine:
         return None
 
     async def async_upsert(self, tile: dict) -> dict:
-        base = new_tile()
+        base = new_tile(tile.get("name") or "Neue Kachel")  # default title = the tile's name
         base.update(tile)
         base["when"] = {**new_tile()["when"], **(tile.get("when") or {})}
         base["where"] = {**new_tile()["where"], **(tile.get("where") or {})}

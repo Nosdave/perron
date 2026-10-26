@@ -212,7 +212,7 @@ class PerronStudioPanel extends HTMLElement {
   ${this.tiles.map((t) => `
     <tr data-id="${esc(t.id)}">
       <td><img data-thumb="${esc(t.id)}" alt=""></td>
-      <td><b>${esc(t.name)}</b><br><span class="chip">${esc(TPL[t.template] || t.template)}</span></td>
+      <td><b>${esc(t.name)}</b><br><span class="chip">${esc(TPL[t.template] || t.template)}</span>${t.enabled === false ? '<span class="chip">deaktiviert</span>' : ""}</td>
       <td>${this._summaryWhen(t).map((s) => `<span class="chip">${esc(s)}</span>`).join("")}</td>
       <td>${esc(ZONES[(t.where || {}).zone] || "")}</td>
       <td><input type="checkbox" data-en="${esc(t.id)}" ${t.enabled !== false ? "checked" : ""} style="width:auto"></td>
@@ -259,7 +259,12 @@ class PerronStudioPanel extends HTMLElement {
       try {
         const u = await this._img("POST", "perron_studio/preview", { tile: t, zone: (t.where || {}).zone || "f" });
         img.src = u;
-      } catch (_) { /* board offline */ }
+      } catch (e) {  // e.g. a Karten-JSON tile with nothing to show right now
+        const n = document.createElement("span");
+        n.className = "hint";
+        n.textContent = /keine Karte/.test(e.message || "") ? "gerade keine Karte" : "Tafel offline";
+        img.replaceWith(n);
+      }
       await new Promise((r) => setTimeout(r, 300));
     }
     for (const x of this.external) {

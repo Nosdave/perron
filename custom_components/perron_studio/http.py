@@ -88,6 +88,8 @@ class PreviewView(HomeAssistantView):
         zone = body.get("zone") if body.get("zone") in ZONES else "f"
         tile = {**new_tile(), **tile}
         card = eng.build_card(tile, "preview")
+        if not card:  # Karten-JSON whose template gives nothing right now
+            return self.json_message("Vorlage liefert gerade keine Karte (z. B. Gerät aus)", HTTPStatus.CONFLICT)
         if card.get("img"):  # the picture has to be on the board first (it downloads it from HA)
             await eng._image_for(tile, max_age=20)
         try:
