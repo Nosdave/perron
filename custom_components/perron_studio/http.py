@@ -8,6 +8,7 @@ from aiohttp import web
 
 from homeassistant.components.http import KEY_HASS, HomeAssistantView
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 
 from .board import BoardError, bmp_to_png
 from .const import ACCENTS, DOMAIN, ICONS, TEMPLATES, ZONES
@@ -51,20 +52,24 @@ class TilesView(HomeAssistantView):
         _admin(request)
         _, d = _ctx(request)
         eng = d["engine"]
-        return self.json([{**t, "_active": eng._active.get(t["id"], False)} for t in eng.tiles])
+        return self.json([{**t, "_status": eng.status(t)} for t in eng.tiles])
 
     async def post(self, request: web.Request) -> web.Response:
         _admin(request)
         _, d = _ctx(request)
         body = await request.json()
-        if body.get("new"):
-            tile = new_tile(body.get("name") or "Neue Kachel")
+        if body.get("new"):  # a draft: becomes an automation with the first "Speichern"
+            return self.json(await d["engine"].async_upsert(new_tile(body.get("name") or "Neue Kachel"), write=False))
         else:
             tile = body.get("tile") or {}
             if not tile.get("id"):
                 return self.json_message("id fehlt", HTTPStatus.BAD_REQUEST)
             tile = {k: v for k, v in tile.items() if not k.startswith("_")}
-        return self.json(await d["engine"].async_upsert(tile))
+        try:
+            saved = await d["engine"].async_upsert(tile)
+        except HomeAssistantError as err:
+            return self.json_message(str(err), HTTPStatus.BAD_REQUEST)
+        return self.json({**saved, "_status": d["engine"].status(saved)})
 
     async def delete(self, request: web.Request) -> web.Response:
         _admin(request)

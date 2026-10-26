@@ -1,9 +1,9 @@
-"""Tile engine: stores tiles, renders their fields (entities / templates), decides when and where
-they appear, and pushes them to the board as card JSON (see docs/cards.md)."""
+"""Tile editor model: stores the tiles of the Studio, saves each one as an ordinary HA automation
+(autogen.py), renders previews, and watches the cards other automations send (docs/studio.md).
+Nothing here runs the tiles: their automations do."""
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import re
@@ -18,12 +18,12 @@ from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
 from homeassistant.exceptions import TemplateError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
+from . import autogen
 from .board import Board
 from .const import REFRESH_ACTIVE, STORAGE_KEY, STORAGE_VERSION
 
@@ -81,13 +81,7 @@ class TileEngine:
         self.hass = hass
         self.board = board
         self.store: Store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry_id}")
-        self.tiles: list[dict] = []
-        self._unsubs: list[CALLBACK_TYPE] = []
-        self._active: dict[str, bool] = {}
-        self._last_hash: dict[str, str] = {}
-        self._last_push: dict[str, float] = {}
-        self._debounce: dict[str, asyncio.TimerHandle] = {}
-        self._later: dict[str, asyncio.TimerHandle] = {}
+        self.tiles: list[dict] = []      # editor model; each tile is saved as an automation
         self.listeners: list[Callable[[], None]] = []
         self.images: dict[str, bytes] = {}           # key -> small JPEG served to the board
         self._img_sent: dict[str, tuple[str, float]] = {}
@@ -102,13 +96,9 @@ class TileEngine:
         self.tiles = (data or {}).get("tiles", [])
         self.external = (data or {}).get("external", {})
         self._ext_unsub = self.hass.bus.async_listen(EVENT_CALL_SERVICE, self._on_service_call)
-        self._setup_listeners()
-        await self.async_evaluate_all()
 
     async def async_save(self) -> None:
         await self.store.async_save({"tiles": self.tiles, "external": self.external})
-        self._setup_listeners()
-        await self.async_evaluate_all()
         for cb in self.listeners:
             cb()
 
@@ -119,37 +109,56 @@ class TileEngine:
                 return t
         return None
 
-    async def async_upsert(self, tile: dict) -> dict:
+    async def async_upsert(self, tile: dict, write: bool = True) -> dict:
         base = new_tile(tile.get("name") or "Neue Kachel")  # default title = the tile's name
         base.update(tile)
         base["when"] = {**new_tile()["when"], **(tile.get("when") or {})}
         base["where"] = {**new_tile()["where"], **(tile.get("where") or {})}
+        base = {k: v for k, v in base.items() if not k.startswith("_")}
+        if write:  # the tile becomes (or updates) an ordinary HA automation
+            cfg = autogen.build_automation(self.hass, base, self.board.device)
+            await autogen.async_save(self.hass, cfg, base.get("enabled", True))
+            base["_hash"] = autogen.config_hash(cfg)
         for i, t in enumerate(self.tiles):
             if t["id"] == base["id"]:
+                if not write and "_hash" in t:
+                    base["_hash"] = t["_hash"]
                 self.tiles[i] = base
                 break
         else:
             self.tiles.append(base)
-        self._last_hash.pop(base["id"], None)
         await self.async_save()
         return base
 
     async def async_delete(self, tile_id: str) -> None:
+        tile = next((t for t in self.tiles if t["id"] == tile_id), None)
         self.tiles = [t for t in self.tiles if t["id"] != tile_id]
-        if self._active.pop(tile_id, False):
-            await self.board.delete_card(f"st_{tile_id}")
+        if tile:
+            await autogen.async_remove(self.hass, autogen.automation_id(tile))
+            await self.async_hide(tile)
         await self.async_save()
+
+    def status(self, tile: dict) -> dict:
+        """Where the tile lives in HA: its automation, on/off, edited outside the Studio?"""
+        from homeassistant.helpers import entity_registry as er
+
+        aid = autogen.automation_id(tile)
+        ent = er.async_get(self.hass).async_get_entity_id("automation", "automation", aid)
+        st = self.hass.states.get(ent) if ent else None
+        raw = None
+        comp = self.hass.data.get("automation")
+        if ent and comp and hasattr(comp, "get_entity"):
+            raw = getattr(comp.get_entity(ent), "raw_config", None)
+        modified = bool(raw and tile.get("_hash") and autogen.config_hash(dict(raw)) != tile["_hash"])
+        return {"automation": ent, "config_id": aid, "on": bool(st and st.state == "on"),
+                "saved": bool(ent), "modified": modified,
+                "last_triggered": str((st.attributes.get("last_triggered") if st else "") or "")[:16].replace("T", " ")}
 
     async def async_unload(self) -> None:
         if self._ext_unsub:
             self._ext_unsub()
         if self._ext_save:
             self._ext_save.cancel()
-        for u in self._unsubs:
-            u()
-        self._unsubs.clear()
-        for h in [*self._debounce.values(), *self._later.values()]:
-            h.cancel()
 
     # ------------------------------------------------------------- cards from automations
     @callback
@@ -193,6 +202,8 @@ class TileEngine:
             raw = getattr(ent, "raw_config", None)
             if not raw:
                 continue
+            if str(raw.get("id") or "").startswith(autogen.ID_PREFIX):
+                continue  # a Studio tile: listed with the tiles
             txt = json.dumps(raw, ensure_ascii=False, default=str)
             if prefix not in txt:
                 continue
@@ -209,6 +220,7 @@ class TileEngine:
                     ids.append(cid)
             out.append({
                 "entity_id": st.entity_id,
+                "config_id": raw.get("id"),
                 "name": st.attributes.get("friendly_name") or st.entity_id,
                 "on": st.state == "on",
                 "last_triggered": str(st.attributes.get("last_triggered") or "")[:16].replace("T", " "),
@@ -406,24 +418,7 @@ class TileEngine:
             card["show"] = int(when.get("show") or 10)
         return card
 
-    # ------------------------------------------------------------- when is a tile active?
-    def is_active(self, tile: dict, now: datetime | None = None) -> bool:
-        if not tile.get("enabled", True):
-            return False
-        when = tile.get("when", {})
-        mode = when.get("mode", "manual")
-        if mode == "manual":
-            return False
-        if mode == "always":
-            return True
-        if mode == "condition":
-            v = self.render(when.get("condition")).lower()
-            return v in ("true", "on", "1", "yes", "ja")
-        if mode == "schedule":
-            return _in_window(when, now or dt_util.now())
-        return False
-
-    # ------------------------------------------------------------- pushing
+    # ------------------------------------------------------------- pictures (preview only)
     async def _image_for(self, tile: dict, max_age: float = 0) -> bool:
         """Fetch the tile's picture (camera, image entity, any entity_picture or URL), shrink it to a
         small JPEG and let the board download it from a short-lived signed URL. False if no picture."""
@@ -484,111 +479,19 @@ class TileEngine:
             _LOGGER.debug("Perron Studio: Bild %s: %s", src, err)
             return None
 
-    async def async_push_state(self, tile: dict, force: bool = False) -> None:
-        card = self.place(self.build_card(tile), tile)
-        h = hashlib.sha1(json.dumps(card, sort_keys=True).encode()).hexdigest()
-        now = asyncio.get_running_loop().time()
-        since = now - self._last_push.get(tile["id"], 0)
-        if not force and self._last_hash.get(tile["id"]) == h and since < REFRESH_ACTIVE:
-            return
-        # at most one push per min_interval (fast sensors such as PV power): catch up later
-        min_iv = max(2, int(tile.get("when", {}).get("min_interval") or 10))
-        if not force and since < min_iv:
-            if tile["id"] not in self._later:
-                def _again(tid: str = tile["id"]) -> None:
-                    self._later.pop(tid, None)
-                    t = next((x for x in self.tiles if x["id"] == tid), None)
-                    if t:
-                        self.hass.async_create_task(self.async_evaluate(t))
-                self._later[tile["id"]] = self.hass.loop.call_later(min_iv - since, _again)
-            return
-        if tile.get("template") in ("img", "ring"):
-            await self._image_for(tile)
-        if await self.board.push_card(card):
-            self._last_hash[tile["id"]] = h
-            self._last_push[tile["id"]] = now
-
+    # ------------------------------------------------------------- on demand (via the automation)
     async def async_show(self, tile: dict, zone: str | None = None, duration: int | None = None) -> None:
-        """On demand (voice, button, automation, event trigger)."""
-        if tile.get("template") in ("img", "ring"):
-            await self._image_for(tile)
-        card = self.build_card(tile, f"st_{tile['id']}_abruf")
-        if not card:
-            return
-        await self.board.push_card(self.place(card, tile, True, zone, duration))
+        """Ask the tile's automation to show it now (Studio itself sends nothing)."""
+        data: dict[str, Any] = {"tile": tile["id"]}
+        if zone:
+            data["zone"] = zone
+        if duration:
+            data["duration"] = int(duration)
+        self.hass.bus.async_fire(autogen.SHOW_EVENT, data)
 
     async def async_hide(self, tile: dict) -> None:
         await self.board.delete_card(f"st_{tile['id']}_abruf")
         await self.board.delete_card(f"st_{tile['id']}")
-        self._active[tile["id"]] = False
-
-    async def async_evaluate(self, tile: dict, force: bool = False) -> None:
-        active = self.is_active(tile)
-        if active and tile.get("template") == "json" and not self._json_card(tile, "x"):
-            active = False  # the template says: nothing to show right now
-        was = self._active.get(tile["id"], False)
-        if active:
-            await self.async_push_state(tile, force=force or not was)
-        elif was:
-            await self.board.delete_card(f"st_{tile['id']}")
-            self._last_hash.pop(tile["id"], None)
-        self._active[tile["id"]] = active
-
-    async def async_evaluate_all(self, *_: Any) -> None:
-        for tile in list(self.tiles):
-            try:
-                await self.async_evaluate(tile)
-            except Exception:  # noqa: BLE001 - one bad tile must not stop the others
-                _LOGGER.exception("Kachel %s", tile.get("name"))
-
-    # ------------------------------------------------------------- listeners
-    def _setup_listeners(self) -> None:
-        for u in self._unsubs:
-            u()
-        self._unsubs = [async_track_time_interval(self.hass, self.async_evaluate_all, timedelta(seconds=30))]
-        for tile in self.tiles:
-            if not tile.get("enabled", True):
-                continue
-            ents = self.entities_of(tile)
-            if ents:
-                self._unsubs.append(async_track_state_change_event(
-                    self.hass, list(ents), self._content_changed(tile["id"])))
-            for ev in (tile.get("when", {}).get("events") or []):
-                ent = (ev.get("entity") or "").strip()
-                if ent:
-                    self._unsubs.append(async_track_state_change_event(
-                        self.hass, [ent], self._event_trigger(tile["id"], (ev.get("to") or "").strip())))
-
-    def _content_changed(self, tile_id: str) -> Callable[[Event], None]:
-        @callback
-        def _cb(_event: Event) -> None:  # debounce bursts of state changes (2 s)
-            old = self._debounce.pop(tile_id, None)
-            if old:
-                old.cancel()
-
-            def _fire() -> None:
-                tile = next((t for t in self.tiles if t["id"] == tile_id), None)
-                if tile:
-                    self.hass.async_create_task(self.async_evaluate(tile))
-
-            self._debounce[tile_id] = self.hass.loop.call_later(2.0, _fire)
-
-        return _cb
-
-    def _event_trigger(self, tile_id: str, to: str) -> Callable[[Event], None]:
-        @callback
-        def _cb(event: Event) -> None:
-            new = event.data.get("new_state")
-            old = event.data.get("old_state")
-            if new is None or (old is not None and old.state == new.state):
-                return
-            if to and new.state != to:
-                return
-            tile = next((t for t in self.tiles if t["id"] == tile_id), None)
-            if tile and tile.get("enabled", True):
-                self.hass.async_create_task(self.async_show(tile))
-
-        return _cb
 
 
 def _hm(v: str) -> int | None:

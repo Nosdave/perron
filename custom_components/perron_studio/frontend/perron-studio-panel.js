@@ -81,7 +81,7 @@ class PerronStudioPanel extends HTMLElement {
       const ids = a.ids.length ? a.ids : [];
       ids.forEach((i) => used.add(i));
       h += `<tr><td colspan="5" style="background:var(--secondary-background-color)"><b>${esc(a.name)}</b>
-        <span class="chip">${a.on ? "an" : "aus"}</span>${a.last_triggered ? `<span class="hint">zuletzt ${esc(a.last_triggered)}</span>` : ""}</td></tr>`;
+        <span class="chip">${a.on ? "an" : "aus"}</span>${a.config_id ? `<a class="chip" href="/config/automation/edit/${encodeURIComponent(a.config_id)}" target="_top">in HA öffnen</a>` : ""}${a.last_triggered ? `<span class="hint">zuletzt ${esc(a.last_triggered)}</span>` : ""}</td></tr>`;
       h += ids.length ? ids.map((i) => this._extRow(byId[i], i)).join("")
         : '<tr><td></td><td colspan="4" class="hint">Karten-id per Template – erscheint beim ersten Senden</td></tr>';
     }
@@ -201,18 +201,18 @@ class PerronStudioPanel extends HTMLElement {
       <div><span>Adresse</span><b>${esc(b.host || "–")}</b></div>
       <div><span>Verbindung</span><b>${b.online ? "online" : "offline"}</b></div>
       <div><span>Zugriff (Token)</span><b>${b.token_ok ? "ok" : "ausstehend"}</b></div>
-      <div><span>Kacheln</span><b>${this.tiles.length} · ${this.tiles.filter((t) => t._active).length} aktiv</b></div>
+      <div><span>Kacheln</span><b>${this.tiles.length} · ${this.tiles.filter((t) => (t._status || {}).on).length} Automationen an</b></div>
     </div>
   </div>
 </section>
 <section class="card">
   <h2>Kacheln</h2>
   ${this.tiles.length ? "" : '<p class="hint">Noch keine Kacheln. Mit „+ Neue Kachel“ anlegen.</p>'}
-  <table>${this.tiles.length ? "<tr><th>Vorschau</th><th>Kachel</th><th>Wann</th><th>Wo</th><th>Aktiv</th><th></th></tr>" : ""}
+  <table>${this.tiles.length ? "<tr><th>Vorschau</th><th>Kachel</th><th>Wann</th><th>Wo</th><th>An</th><th></th></tr>" : ""}
   ${this.tiles.map((t) => `
     <tr data-id="${esc(t.id)}">
       <td><img data-thumb="${esc(t.id)}" alt=""></td>
-      <td><b>${esc(t.name)}</b><br><span class="chip">${esc(TPL[t.template] || t.template)}</span>${t.enabled === false ? '<span class="chip">deaktiviert</span>' : ""}</td>
+      <td><b>${esc(t.name)}</b><br><span class="chip">${esc(TPL[t.template] || t.template)}</span>${this._statusChips(t)}</td>
       <td>${this._summaryWhen(t).map((s) => `<span class="chip">${esc(s)}</span>`).join("")}</td>
       <td>${esc(ZONES[(t.where || {}).zone] || "")}</td>
       <td><input type="checkbox" data-en="${esc(t.id)}" ${t.enabled !== false ? "checked" : ""} style="width:auto"></td>
@@ -283,18 +283,33 @@ class PerronStudioPanel extends HTMLElement {
     this._open(t.id);
   }
 
+  _statusChips(t) {
+    const st = t._status || {};
+    if (!st.saved) return '<span class="chip">Entwurf – noch keine Automation</span>';
+    return `<span class="chip">Automation ${st.on ? "an" : "aus"}</span>`
+      + (st.modified ? '<span class="chip" style="color:var(--error-color)">in HA geändert</span>' : "")
+      + `<a class="chip" href="/config/automation/edit/${encodeURIComponent(st.config_id)}" target="_top">in HA öffnen</a>`;
+  }
+
   async _save(tile, back = true) {
+    const old = this.tiles.find((t) => t.id === tile.id);
+    if (old && (old._status || {}).modified && !confirm("Die Automation dieser Kachel wurde in Home Assistant von Hand geändert. Speichern überschreibt diese Änderungen. Fortfahren?")) return false;
     try {
       const saved = await this._hass.callApi("POST", "perron_studio/tiles", { tile });
       const i = this.tiles.findIndex((t) => t.id === saved.id);
       if (i >= 0) this.tiles[i] = saved; else this.tiles.push(saved);
-      this._toast("Gespeichert");
+      this._toast("Gespeichert – als Automation „Perron Studio: " + saved.name + "“");
       this.tiles = await this._hass.callApi("GET", "perron_studio/tiles");
       if (back) this._renderList();
-    } catch (e) { this._toast("Fehler: " + (e.message || e)); }
+      return true;
+    } catch (e) { this._toast("Fehler: " + (e.message || e)); return false; }
   }
 
   async _showNow(tile) {
+    if (!((this.tiles.find((t) => t.id === tile.id) || {})._status || {}).saved) {
+      this._toast("Erst speichern – gezeigt wird über die Automation der Kachel");
+      return;
+    }
     try {
       await this._hass.callApi("POST", "perron_studio/show", { tile, zone: (tile.where || {}).zone, duration: (tile.where || {}).duration });
       this._toast("Auf der Tafel");
@@ -446,7 +461,10 @@ class PerronStudioPanel extends HTMLElement {
     $("#addev").onclick = () => { (this.edit.when.events = this.edit.when.events || []).push({ entity: "", to: "" }); this._renderEditor(); };
     $("#back").onclick = () => this._renderList();
     $("#save").onclick = () => this._save(this.edit);
-    $("#shownow").onclick = () => this._showNow(this.edit);
+    $("#shownow").onclick = async () => {  // save first: the automation shows what is saved
+      if ((await this._save(this.edit, false)) === false) return;
+      this._showNow(this.edit);
+    };
     $("#del").onclick = async () => {
       if (!confirm(`Kachel „${this.edit.name}“ löschen?`)) return;
       await this._hass.callApi("DELETE", `perron_studio/tiles?id=${encodeURIComponent(this.edit.id)}`);
