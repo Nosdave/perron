@@ -1,0 +1,33 @@
+# Videokarten: Home Assistant (Perron Studio, Aktion perron_studio.play_video) rechnet jede
+# Quelle live auf die Videofläche herunter und schickt JPEG-Einzelbilder per UDP (Port 4049).
+# Diese Aktionen kündigen den Stream an (verschlüsselte API) und beenden ihn.
+# layout: f Vollbild | b mit Statusleiste + Infozeile | s Video links, Text rechts | p Kachel rechts
+api:
+  actions:
+    - action: video_start
+      variables:
+        session: string
+        key: string
+        layout: string
+        title: string
+        sub: string
+        seconds: int
+      then:
+        - lambda: 'perron::video_start(session, key, layout, title, sub, seconds);'
+    - action: video_stop
+      variables:
+        session: string
+      then:
+        - lambda: 'perron::video_stop(session);'
+
+text_sensor:
+  - platform: template
+    name: "Video"
+    icon: mdi:filmstrip
+    entity_category: diagnostic
+    update_interval: 2s
+    lambda: |-
+      static std::string last;
+      if (perron::video_status() == last) return {};
+      last = perron::video_status();
+      return last;

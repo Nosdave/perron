@@ -372,6 +372,32 @@ number:
     initial_value: 100
     entity_category: config
   - platform: template
+    id: cfg_brightness_video
+    name: "Helligkeit Video (mindestens)"
+    icon: mdi:filmstrip
+    unit_of_measurement: "%"
+    min_value: 1
+    max_value: 100
+    step: 1
+    mode: slider
+    optimistic: true
+    restore_value: true
+    initial_value: 45
+    entity_category: config
+  - platform: template
+    id: cfg_video_luma
+    name: "Video-Bildhelligkeit (max. Mittelwert)"
+    icon: mdi:brightness-6
+    unit_of_measurement: "%"
+    min_value: 20
+    max_value: 100
+    step: 5
+    mode: slider
+    optimistic: true
+    restore_value: true
+    initial_value: 60
+    entity_category: config
+  - platform: template
     id: cfg_brightness_night
     name: "Helligkeit Nachtzeit"
     icon: mdi:weather-night
@@ -593,9 +619,15 @@ interval:
             int i = std::min(2, (int) x);
             pct = pts[i] + (pts[i + 1] - pts[i]) * (x - i);
           }
+          // Videokarte: mindestens "Helligkeit Video", auch nachts (auf Abruf) - danach wie vorher
+          perron::video_luma_cap() = id(cfg_video_luma).state;
+          bool vid = perron::video().active;
+          if (vid) pct = std::max(pct, id(cfg_brightness_video).state);
           float target = std::max(1.0f, pct * 2.55f);
           static float smooth = -1;
-          smooth = smooth < 0 ? target : smooth + (target - smooth) * 0.35f;
+          static bool was_vid = false;
+          smooth = (smooth < 0 || vid != was_vid) ? target : smooth + (target - smooth) * 0.35f;  // Video: sofort
+          was_vid = vid;
           static int last_b = -1;
           int b = (int) lroundf(smooth);
           if (abs(b - last_b) >= 2 || (last_b != b && (b <= 10 || night))) { id(matrix).set_brightness(b); last_b = b; }

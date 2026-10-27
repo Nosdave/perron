@@ -4,7 +4,9 @@
       "user": {
         "title": "Perron Studio",
         "description": "Wähle deine Perron-Tafel unter den ESPHome-Geräten. Für Live-Bild und Vorschau wird ein Zugangs-Token erzeugt und über die verschlüsselte ESPHome-Verbindung an die Tafel übertragen.",
-        "data": { "esphome_entry_id": "Tafel" }
+        "data": {
+          "esphome_entry_id": "Tafel"
+        }
       }
     },
     "abort": {
@@ -17,23 +19,81 @@
       "name": "Kachel zeigen",
       "description": "Zeigt eine Perron-Studio-Kachel jetzt auf der Tafel (Sprachbefehl, Knopf, Automation).",
       "fields": {
-        "tile": { "name": "Kachel", "description": "Name oder ID der Kachel." },
-        "zone": { "name": "Wo", "description": "Vollbild, Kachel rechts oder Infozeile (Standard: Einstellung der Kachel)." },
-        "duration": { "name": "Dauer", "description": "Sekunden (Standard: Einstellung der Kachel)." }
+        "tile": {
+          "name": "Kachel",
+          "description": "Name oder ID der Kachel."
+        },
+        "zone": {
+          "name": "Wo",
+          "description": "Vollbild, Kachel rechts oder Infozeile (Standard: Einstellung der Kachel)."
+        },
+        "duration": {
+          "name": "Dauer",
+          "description": "Sekunden (Standard: Einstellung der Kachel)."
+        }
       }
     },
     "hide": {
       "name": "Kachel ausblenden",
       "description": "Nimmt eine Kachel von der Tafel.",
-      "fields": { "tile": { "name": "Kachel", "description": "Name oder ID der Kachel." } }
+      "fields": {
+        "tile": {
+          "name": "Kachel",
+          "description": "Name oder ID der Kachel."
+        }
+      }
     },
     "show_commute": {
       "name": "Pendeln zeigen",
       "description": "Berechnet Pendel-Verbindung 1 oder 2 jetzt und zeigt sie im Vollbild.",
       "fields": {
-        "slot": { "name": "Verbindung", "description": "1 oder 2" },
-        "duration": { "name": "Dauer", "description": "Sekunden" }
+        "slot": {
+          "name": "Verbindung",
+          "description": "1 oder 2"
+        },
+        "duration": {
+          "name": "Dauer",
+          "description": "Sekunden"
+        }
       }
+    },
+    "play_video": {
+      "name": "Video abspielen",
+      "description": "Spielt ein beliebiges Video live auf der Tafel: Kamera, Medienquelle, Link (http/rtsp), freigegebene Datei oder GIF. Home Assistant rechnet es passend herunter und streamt es.",
+      "fields": {
+        "source": {
+          "name": "Quelle",
+          "description": "camera.x, media-source://…, http(s)/rtsp-Link oder freigegebener Pfad."
+        },
+        "layout": {
+          "name": "Layout",
+          "description": "f Vollbild, b mit Statusleiste und Infozeile, s Video links und Text rechts, p Kachel neben den Abfahrten."
+        },
+        "title": {
+          "name": "Titel",
+          "description": "Bei Layout s und p."
+        },
+        "text": {
+          "name": "Text",
+          "description": "Bei Layout s."
+        },
+        "duration": {
+          "name": "Dauer",
+          "description": "Sekunden (max. 900)."
+        },
+        "fps": {
+          "name": "Bilder pro Sekunde",
+          "description": "1–20, Standard 12."
+        },
+        "loop": {
+          "name": "Wiederholen",
+          "description": "Kurze Clips und GIFs über die ganze Dauer wiederholen."
+        }
+      }
+    },
+    "stop_video": {
+      "name": "Video beenden",
+      "description": "Beendet das Video auf der Tafel."
     }
   }
 }

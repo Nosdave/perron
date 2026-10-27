@@ -47,3 +47,49 @@ show_commute:
           min: 5
           max: 120
           unit_of_measurement: s
+play_video:
+  fields:
+    source:
+      required: true
+      example: "camera.wohnungstur"
+      selector:
+        text:
+    layout:
+      default: "f"
+      selector:
+        select:
+          options:
+            - label: "Vollbild (randlos)"
+              value: "f"
+            - label: "Mit Statusleiste und Infozeile"
+              value: "b"
+            - label: "Video links, Text rechts"
+              value: "s"
+            - label: "Kachel rechts, Abfahrten bleiben"
+              value: "p"
+    title:
+      example: "Volt · Wetter"
+      selector:
+        text:
+    text:
+      example: "Morgen 14°, ab 12 Uhr leichter Regen"
+      selector:
+        text:
+    duration:
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 900
+          unit_of_measurement: s
+    fps:
+      default: 12
+      selector:
+        number:
+          min: 1
+          max: 20
+    loop:
+      default: false
+      selector:
+        boolean:
+stop_video:

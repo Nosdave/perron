@@ -7,6 +7,7 @@ const TPL = {
 };
 const MODES = { manual: "Nur auf Abruf", always: "Immer", condition: "Solange Bedingung wahr", schedule: "Zeitfenster" };
 const ZONES = { f: "Vollbild", p: "Kachel rechts", l: "Infozeile" };
+const VLAYOUTS = { f: "Vollbild", b: "Mit Statusleiste", s: "Video links, Text rechts", p: "Kachel rechts" };
 const PRIO = { 1: "Ereignis (wichtig)", 2: "Zustand (normal)", 3: "Hintergrund" };
 const ACC = { y: "#ffc400", g: "#4fd18b", b: "#41bdf5", v: "#b48cff", w: "#ffe9cc" };
 const COLORS = { w: "normal", a: "Achtung (gelb)", r: "Alarm (rot)", s: "grau", g: "grün", b: "blau", y: "gelb", v: "violett" };
@@ -206,6 +207,23 @@ class PerronStudioPanel extends HTMLElement {
   </div>
 </section>
 <section class="card">
+  <h2>Video <span class="chip">live auf die Tafel</span></h2>
+  <datalist id="vents">${Object.keys(this._hass.states).filter((e) => e.startsWith("camera.")).sort().map((e) => `<option value="${esc(e)}">`).join("")}</datalist>
+  <div class="row">
+    <div style="grid-column:span 3"><label>Quelle: Kamera, Link (http/rtsp), media-source://… oder freigegebene Datei</label><input id="vsrc" list="vents" placeholder="camera.wohnungstur oder https://…/video.mp4"></div>
+  </div>
+  <label>Layout</label>
+  <div class="seg">${Object.entries(VLAYOUTS).map(([k, v]) => `<span data-vl="${k}" class="${(this.vlayout || "s") === k ? "on" : ""}">${v}</span>`).join("")}</div>
+  <div class="row">
+    <div><label>Titel (Layout seitlich/Kachel)</label><input id="vtitle" placeholder="Volt · Wetter"></div>
+    <div><label>Text (Layout seitlich)</label><input id="vtext" placeholder="Morgen 14°, ab 12 Uhr Regen"></div>
+    <div><label>Dauer (s)</label><input id="vdur" type="number" value="30"></div>
+    <div><label>Wiederholen (GIF)</label><select id="vloop"><option value="0">nein</option><option value="1">ja</option></select></div>
+  </div>
+  <p style="display:flex;gap:8px"><button id="vplay">▶ Abspielen</button><button class="ghost" id="vstop">■ Stopp</button></p>
+  <p class="hint">Aus Automationen und Skripten: Aktion <code>perron_studio.play_video</code> (z. B. am Ende des Volt-Wettervideo-Skripts).</p>
+</section>
+<section class="card">
   <h2>Kacheln</h2>
   ${this.tiles.length ? "" : '<p class="hint">Noch keine Kacheln. Mit „+ Neue Kachel“ anlegen.</p>'}
   <table>${this.tiles.length ? "<tr><th>Vorschau</th><th>Kachel</th><th>Wann</th><th>Wo</th><th>An</th><th></th></tr>" : ""}
@@ -228,6 +246,23 @@ class PerronStudioPanel extends HTMLElement {
   ${this.autos.length || this.external.length ? "" : '<p class="hint">Keine gefunden.</p>'}
   <table>${this._extSection()}</table>
 </section>`;
+    main.querySelectorAll("[data-vl]").forEach((el) => (el.onclick = () => {
+      this.vlayout = el.dataset.vl;
+      main.querySelectorAll("[data-vl]").forEach((x) => x.classList.toggle("on", x === el));
+    }));
+    main.querySelector("#vplay").onclick = async () => {
+      const v = (id) => main.querySelector(id).value;
+      try {
+        await this._hass.callService("perron_studio", "play_video", {
+          source: v("#vsrc"), layout: this.vlayout || "s", title: v("#vtitle"), text: v("#vtext"),
+          duration: Number(v("#vdur")) || 30, loop: v("#vloop") === "1" });
+        this._toast("Video läuft");
+      } catch (e) { this._toast("Fehler: " + (e.message || e)); }
+    };
+    main.querySelector("#vstop").onclick = async () => {
+      try { await this._hass.callService("perron_studio", "stop_video", {}); this._toast("Video gestoppt"); }
+      catch (e) { this._toast("Fehler: " + (e.message || e)); }
+    };
     main.querySelectorAll("[data-xshow]").forEach((el) => (el.onclick = async () => {
       try {
         await this._hass.callApi("POST", "perron_studio/external", { action: "show", id: el.dataset.xshow });

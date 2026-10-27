@@ -4,7 +4,9 @@
       "user": {
         "title": "Perron Studio",
         "description": "Choose your Perron board among the ESPHome devices. An access token for the live view and the preview is created and transferred to the board over the encrypted ESPHome connection.",
-        "data": { "esphome_entry_id": "Board" }
+        "data": {
+          "esphome_entry_id": "Board"
+        }
       }
     },
     "abort": {
@@ -17,23 +19,81 @@
       "name": "Show tile",
       "description": "Shows a Perron Studio tile on the board now (voice command, button, automation).",
       "fields": {
-        "tile": { "name": "Tile", "description": "Name or id of the tile." },
-        "zone": { "name": "Where", "description": "Full screen, right panel or info line (default: the tile's setting)." },
-        "duration": { "name": "Duration", "description": "Seconds (default: the tile's setting)." }
+        "tile": {
+          "name": "Tile",
+          "description": "Name or id of the tile."
+        },
+        "zone": {
+          "name": "Where",
+          "description": "Full screen, right panel or info line (default: the tile's setting)."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Seconds (default: the tile's setting)."
+        }
       }
     },
     "hide": {
       "name": "Hide tile",
       "description": "Removes a tile from the board.",
-      "fields": { "tile": { "name": "Tile", "description": "Name or id of the tile." } }
+      "fields": {
+        "tile": {
+          "name": "Tile",
+          "description": "Name or id of the tile."
+        }
+      }
     },
     "show_commute": {
       "name": "Show commute",
       "description": "Routes commute 1 or 2 now and shows it full screen.",
       "fields": {
-        "slot": { "name": "Commute", "description": "1 or 2" },
-        "duration": { "name": "Duration", "description": "Seconds" }
+        "slot": {
+          "name": "Commute",
+          "description": "1 or 2"
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Seconds"
+        }
       }
+    },
+    "play_video": {
+      "name": "Play video",
+      "description": "Plays any video live on the board: camera entity, media-source id, URL (http/rtsp), allowed local file or GIF. Home Assistant scales it to the layout and streams it.",
+      "fields": {
+        "source": {
+          "name": "Source",
+          "description": "camera.x, media-source://…, http(s)/rtsp URL or an allowed local path."
+        },
+        "layout": {
+          "name": "Layout",
+          "description": "f full bleed, b with status bar and info line, s video left and text right, p panel tile next to the departures."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Shown with layouts s and p."
+        },
+        "text": {
+          "name": "Text",
+          "description": "Shown with layout s."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Seconds (max 900)."
+        },
+        "fps": {
+          "name": "Frames per second",
+          "description": "1–20, default 12."
+        },
+        "loop": {
+          "name": "Loop",
+          "description": "Repeat short clips and GIFs for the whole duration."
+        }
+      }
+    },
+    "stop_video": {
+      "name": "Stop video",
+      "description": "Ends the video on the board."
     }
   }
 }

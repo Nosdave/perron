@@ -1075,6 +1075,7 @@ inline bool in_night(const Look &L, const esphome::ESPTime &t) {
 
 }  // namespace perron
 #include "perron_cards_draw.h"
+#include "perron_video.h"
 namespace perron {
 
 // ------------------------------------------------------------------ main entry
@@ -1103,6 +1104,15 @@ static void render(Display &it, const Fonts &F, const Look &L, const esphome::ES
   }
 
   frame_no()++;  // drives text marquees (1 px per frame)
+  // Video card (Perron Studio's video filter): after alarms, before everything else; a ringing
+  // doorbell interrupts it (the stream keeps running underneath)
+  {
+    bool ring = false;
+    for (auto &c : ha_cards())
+      if (c.t == T_RING && c.p == 1 && ms - c.since_ms < c.hold * 1000u) ring = true;
+    if (!ring && video_card(it, F, fr, L, t, now)) return;
+    if (ring) video_running();  // still ends the card on time
+  }
   // Home Assistant cards (JSON templates / canvas / images)
   static uint32_t last_exp_s = 0;
   if (ms / 1000 != last_exp_s) { last_exp_s = ms / 1000; expire_cards(now); }

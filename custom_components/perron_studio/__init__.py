@@ -19,12 +19,14 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.helpers.event import async_track_time_interval
 
 from .board import Board
 from .const import CONF_DEVICE, CONF_HOST, CONF_TOKEN, DOMAIN, PANEL_JS, PANEL_URL
 from .engine import TileEngine
 from .http import async_register_views
+from .video import AREAS, VideoPlayer
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.CAMERA]
@@ -33,7 +35,8 @@ PLATFORMS = [Platform.CAMERA]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     board = Board(hass, entry.data[CONF_DEVICE], entry.data[CONF_HOST], entry.data[CONF_TOKEN])
     engine = TileEngine(hass, board, entry.entry_id)
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"board": board, "engine": engine}
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"board": board, "engine": engine,
+                                                         "video": VideoPlayer(hass, board)}
 
     # hand the access token to the board (encrypted ESPHome API); retry until the board is online
     async def _ensure_token(*_):
@@ -56,7 +59,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass,
             frontend_url_path=PANEL_URL,
             webcomponent_name="perron-studio-panel",
-            module_url=f"{PANEL_JS}?v=0.3.3",
+            module_url=f"{PANEL_JS}?v=0.4.0",
             sidebar_title="Perron Studio",
             sidebar_icon="mdi:view-dashboard-variant",
             require_admin=True,
@@ -73,6 +76,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     data = hass.data[DOMAIN].pop(entry.entry_id, None)
     if data:
+        await data["video"].async_stop()
         await data["engine"].async_unload()
     if not [k for k in hass.data[DOMAIN] if not k.startswith("_")]:
         from homeassistant.components import frontend
@@ -114,6 +118,34 @@ def _register_services(hass: HomeAssistant) -> None:
     async def commute(call: ServiceCall) -> None:
         await first_engine(hass).board.show_commute(call.data["slot"], call.data.get("duration", 30))
 
+    def first_video():
+        for k, v in hass.data.get(DOMAIN, {}).items():
+            if not k.startswith("_"):
+                return v["video"]
+        raise ServiceValidationError("Perron Studio ist nicht eingerichtet")
+
+    vmap = {"vollbild": "f", "leiste": "b", "seitlich": "s", "kachel": "p"}
+
+    async def play_video(call: ServiceCall) -> None:
+        lay = call.data.get("layout", "f")
+        await first_video().async_play(call.data["source"], vmap.get(lay, lay), call.data.get("title", ""),
+                                       call.data.get("text", ""), call.data.get("duration", 30),
+                                       call.data.get("fps", 12), call.data.get("loop", False))
+
+    async def stop_video(call: ServiceCall) -> None:
+        await first_video().async_stop()
+
+    # admin only: a video source is an arbitrary URL / file that HA's ffmpeg opens
+    # (automations and scripts without a user still work)
+    async_register_admin_service(hass, DOMAIN, "play_video", play_video, schema=vol.Schema({
+        vol.Required("source"): cv.string,
+        vol.Optional("layout", default="f"): vol.In([*AREAS, *vmap]),
+        vol.Optional("title", default=""): cv.string,
+        vol.Optional("text", default=""): cv.string,
+        vol.Optional("duration", default=30): vol.All(vol.Coerce(int), vol.Range(min=1, max=900)),
+        vol.Optional("fps", default=12): vol.All(vol.Coerce(int), vol.Range(min=1, max=20)),
+        vol.Optional("loop", default=False): cv.boolean}))
+    async_register_admin_service(hass, DOMAIN, "stop_video", stop_video)
     hass.services.async_register(DOMAIN, "show", show, schema=vol.Schema({
         vol.Required("tile"): cv.string, vol.Optional("zone"): zone,
         vol.Optional("duration"): vol.All(vol.Coerce(int), vol.Range(min=3, max=3600))}))

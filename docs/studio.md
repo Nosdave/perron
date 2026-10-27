@@ -88,6 +88,37 @@ Assistant login. For the preview the Studio fetches the picture itself, shrinks 
 lets the board download it from a signed URL (5 minutes). Home Assistant's *internal URL* must be
 set (Settings → System → Network).
 
+## Video
+
+`perron_studio.play_video` plays any video live on the board – a camera, a freshly generated AI
+clip, a video from the web, a GIF:
+
+```yaml
+action: perron_studio.play_video
+data:
+  source: camera.front_door        # camera entity, media-source://…, http(s)/rtsp URL, allowed path
+  layout: s                        # f full bleed · b status bar + info line · s video left, text right · p panel tile
+  title: Volt · Wetter
+  text: Morgen 14°, ab 12 Uhr leichter Regen
+  duration: 30                     # seconds (max 900)
+  loop: false                      # repeat short clips / GIFs for the whole duration
+```
+
+Home Assistant does the work: its ffmpeg scales and crops the source live to the layout's video
+area (192×64, 192×44, 96×64 or 62×44), boosts colour a little for LEDs and sends about 12 small JPEG
+frames per second to the board (UDP port 4049). The board is told about the stream first over the
+encrypted ESPHome API and only accepts frames of that stream; it ends the card by itself after the
+duration or when frames stop. Alarms and a ringing doorbell take precedence. `perron_studio.stop_video`
+ends it earlier. The panel has a *Video* section to try sources and layouts.
+
+Local files must be in `allowlist_external_dirs`. Board firmware 0.6 or later. On the board,
+*Helligkeit Video (mindestens)* lifts the panel while a video runs (also at night) and
+*Video-Bildhelligkeit* sets how bright frames may be on average.
+
+Security: only administrators (and automations/scripts) may call `play_video`; ffmpeg only gets
+the protocols a source type needs (no local files through playlists), input size is capped, and
+every UDP packet carries an HMAC with a per-stream key the board got over the encrypted API.
+
 ## Cards from automations
 
 Studio watches every card that other automations send with `esphome.<board>_push_json` and lists
