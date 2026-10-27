@@ -53,7 +53,10 @@ struct Config {
   std::string train_filter;         // "p2" (platform), S-lines or destination substrings
   // Public-transport commutes (0-2): "lat,lon|label" targets, optional start (empty = home),
   // "Mo-Fr 06:30-09:00" time window; routed door to door by a MOTIS server (Transitous).
-  struct Commute { std::string name, to, from, when; } cm[2];
+  // walk_from / walk_to (min): measured once and fixed; > 0 means start / target is a STOP, sent
+  // to the router as is (a public place), and the walk is added by the board (privacy: the home and
+  // work addresses never leave the board). 0 = address, rounded to ~100 m, router walks.
+  struct Commute { std::string name, to, from, when; int walk_from = 0, walk_to = 0; } cm[2];
   std::string router = "https://api.transitous.org";
   float lat = 50.846f, lon = 4.352f;  // home position (weather + BE-Alert); default Brussels centre
   bool weather_on = true, bealert_on = true, news_on = false, disruptions_on = true;
@@ -152,6 +155,8 @@ inline void set_config(const Config &c) {
                  cur.cm[0].to != c.cm[0].to || cur.cm[0].from != c.cm[0].from || cur.cm[0].when != c.cm[0].when ||
                  cur.cm[1].to != c.cm[1].to || cur.cm[1].from != c.cm[1].from || cur.cm[1].when != c.cm[1].when ||
                  cur.cm[0].name != c.cm[0].name || cur.cm[1].name != c.cm[1].name ||
+                 cur.cm[0].walk_from != c.cm[0].walk_from || cur.cm[0].walk_to != c.cm[0].walk_to ||
+                 cur.cm[1].walk_from != c.cm[1].walk_from || cur.cm[1].walk_to != c.cm[1].walk_to ||
                  std::fabs(cur.lat - c.lat) > 1e-4 ||
                  std::fabs(cur.lon - c.lon) > 1e-4 || cur.weather_on != c.weather_on ||
                  cur.bealert_on != c.bealert_on || cur.news_on != c.news_on || cur.news_src != c.news_src ||
@@ -666,18 +671,21 @@ inline bool fetch_commute(const Config &c) {
     res[i].name = cc.name.empty() ? std::string("Pendeln ") + std::to_string(i + 1) : cc.name;
     bool demand = now && commute_demand_until(i) > now;
     if (cc.to.empty() || !now || (!demand && !commute_window(cc.when, now))) continue;
-    // privacy: the routing service only gets coordinates rounded to ~100 m (3 decimals)
-    auto coords = [&](const std::string &v) {
+    // privacy: addresses go to the routing service rounded to ~100 m (3 decimals); stops (walk
+    // time set) are public places and go exactly, so the router starts at the right stop
+    auto coords = [&](const std::string &v, bool stop) {
       float la = 0, lo = 0;
       char b[32];
       if (sscanf(v.c_str(), "%f,%f", &la, &lo) != 2) return std::string();
-      snprintf(b, sizeof(b), "%.3f,%.3f", la, lo);
+      snprintf(b, sizeof(b), stop ? "%.5f,%.5f" : "%.3f,%.3f", la, lo);
       return std::string(b);
     };
+    const bool stop_from = cc.walk_from > 0 && !cc.from.empty(), stop_to = cc.walk_to > 0;
     char home[32];
     snprintf(home, sizeof(home), "%.3f,%.3f", c.lat, c.lon);
-    std::string from = cc.from.empty() ? std::string(home) : coords(cc.from);
-    if (from.empty() || coords(cc.to).empty()) { err = res[i].name + ": Ziel/Start ungültig"; continue; }
+    std::string from = cc.from.empty() ? std::string(home) : coords(cc.from, stop_from);
+    std::string to = coords(cc.to, stop_to);
+    if (from.empty() || to.empty()) { err = res[i].name + ": Ziel/Start ungültig"; continue; }
     JsonDocument filter;
     JsonObject it = filter["itineraries"].add<JsonObject>();
     it["duration"] = true; it["startTime"] = true; it["endTime"] = true;
@@ -686,7 +694,7 @@ inline bool fetch_commute(const Config &c) {
     JsonDocument doc(PsramAllocator::instance());
     asked++;
     std::string e = get_json(c.router + "/api/v1/plan?numItineraries=6&detailedTransfers=false&fromPlace=" +
-                                 url_encode(from) + "&toPlace=" + url_encode(coords(cc.to)),
+                                 url_encode(from) + "&toPlace=" + url_encode(to),
                              doc, st, &filter, 512 * 1024);
     if (!e.empty()) { err = res[i].name + ": " + e; continue; }
     // Pick like a person would: earliest arrival, but every transfer costs 5 min and a transit
@@ -696,7 +704,10 @@ inline bool fetch_commute(const Config &c) {
     for (JsonVariantConst x : doc["itineraries"].as<JsonArrayConst>()) {
       uint32_t s0 = parse_iso(x["startTime"] | (const char *) nullptr);
       uint32_t s1 = parse_iso(x["endTime"] | (const char *) nullptr);
-      if (!s0 || !s1 || s0 + 60 < now || s0 > now + 45 * 60) continue;
+      if (!s0 || !s1) continue;
+      if (stop_from) s0 -= cc.walk_from * 60;  // leave home this much before the stop
+      if (stop_to) s1 += cc.walk_to * 60;      // and arrive after the walk from the stop
+      if (s0 + 60 < now || s0 > now + 45 * 60) continue;
       int transit = 0, tiny = 0, w_first = 0, w_last = 0;
       std::vector<std::string> lines;
       for (JsonVariantConst l : x["legs"].as<JsonArrayConst>()) {
@@ -718,6 +729,8 @@ inline bool fetch_commute(const Config &c) {
         if (mode == "SUBWAY" && !n.empty() && isdigit((unsigned char) n[0])) n = "M" + n;
         lines.push_back(led_safe(n));
       }
+      if (stop_from) w_first = cc.walk_from;  // measured, fixed (the router walks ~0 from the stop)
+      if (stop_to) w_last = cc.walk_to;
       long score = (long) s1 + 300L * std::max(0, transit - 1) + 300L * tiny;
       if (score >= best_score) continue;
       best_score = score;

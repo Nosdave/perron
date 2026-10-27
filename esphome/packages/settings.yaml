@@ -371,6 +371,60 @@ number:
     restore_value: true
     initial_value: 100
     entity_category: config
+  # Pendeln: feste Gehzeiten (einmal gemessen). > 0: Start/Ziel ist eine Haltestelle, die Tafel
+  # rechnet die Gehzeit selbst dazu (Wohn-/Arbeitsadresse verlassen die Tafel nicht). 0 = Adresse.
+  - platform: template
+    id: cfg_pt1_wfrom
+    name: "Pendeln 1 Gehzeit zur Start-Haltestelle"
+    icon: mdi:walk
+    unit_of_measurement: "min"
+    min_value: 0
+    max_value: 40
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    entity_category: config
+  - platform: template
+    id: cfg_pt1_wto
+    name: "Pendeln 1 Gehzeit von der Ziel-Haltestelle"
+    icon: mdi:walk
+    unit_of_measurement: "min"
+    min_value: 0
+    max_value: 40
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    entity_category: config
+  - platform: template
+    id: cfg_pt2_wfrom
+    name: "Pendeln 2 Gehzeit zur Start-Haltestelle"
+    icon: mdi:walk
+    unit_of_measurement: "min"
+    min_value: 0
+    max_value: 40
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    entity_category: config
+  - platform: template
+    id: cfg_pt2_wto
+    name: "Pendeln 2 Gehzeit von der Ziel-Haltestelle"
+    icon: mdi:walk
+    unit_of_measurement: "min"
+    min_value: 0
+    max_value: 40
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    entity_category: config
   - platform: template
     id: cfg_brightness_video
     name: "Helligkeit Video (mindestens)"
@@ -559,8 +613,10 @@ interval:
           c.stib_lines = id(cfg_stib_lines).state;
           c.train_station = id(cfg_train_station).state;
           c.train_filter = id(cfg_train_filter).state;
-          c.cm[0] = {id(cfg_pt1_name).state, id(cfg_pt1_to).state, id(cfg_pt1_from).state, id(cfg_pt1_when).state};
-          c.cm[1] = {id(cfg_pt2_name).state, id(cfg_pt2_to).state, id(cfg_pt2_from).state, id(cfg_pt2_when).state};
+          c.cm[0] = {id(cfg_pt1_name).state, id(cfg_pt1_to).state, id(cfg_pt1_from).state, id(cfg_pt1_when).state,
+                     (int) id(cfg_pt1_wfrom).state, (int) id(cfg_pt1_wto).state};
+          c.cm[1] = {id(cfg_pt2_name).state, id(cfg_pt2_to).state, id(cfg_pt2_from).state, id(cfg_pt2_when).state,
+                     (int) id(cfg_pt2_wfrom).state, (int) id(cfg_pt2_wto).state};
           if (!id(cfg_router).state.empty()) c.router = id(cfg_router).state;
           while (!c.router.empty() && c.router.back() == '/') c.router.pop_back();
           float la, lo;

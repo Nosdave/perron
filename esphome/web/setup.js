@@ -10,7 +10,8 @@
   const T = (n) => ["text", n], N = (n) => ["number", n], SEL = (n) => ["select", n], SW = (n) => ["switch", n];
   const E = {
     key: T("STIB API-Schlüssel"), points: T("Haltestellen"), lines: T("Linienfilter"),
-    station: T("Bahnhof"), tfilter: T("Zugfilter"), pt1n: T("Pendeln 1 Name"), pt1t: T("Pendeln 1 Ziel"), pt1f: T("Pendeln 1 Start"), pt1w: T("Pendeln 1 Zeiten"),
+    station: T("Bahnhof"), tfilter: T("Zugfilter"), pt1n: T("Pendeln 1 Name"), pt1t: T("Pendeln 1 Ziel"), pt1f: T("Pendeln 1 Start"), pt1w: T("Pendeln 1 Zeiten"), pt1a: N("Pendeln 1 Gehzeit zur Start-Haltestelle"), pt1b: N("Pendeln 1 Gehzeit von der Ziel-Haltestelle"),
+    pt2a: N("Pendeln 2 Gehzeit zur Start-Haltestelle"), pt2b: N("Pendeln 2 Gehzeit von der Ziel-Haltestelle"),
     pt2n: T("Pendeln 2 Name"), pt2t: T("Pendeln 2 Ziel"), pt2f: T("Pendeln 2 Start"), pt2w: T("Pendeln 2 Zeiten"), router: T("Pendeln Routing-Server"),
     loc: T("Standort"), nsrc: T("Nachrichtenquellen"), dfilter: T("Zielfilter"), alias: T("Kurznamen"), night: T("Nachtzeit"), free: T("Freitext"),
     layout: SEL("Layout"), lang: SEL("Sprache"), nmode: SEL("Nachtmodus"),
@@ -90,7 +91,11 @@
       h("div", { class: "grp" }, `Pendeln ${i} (Bus & Bahn)`),
       field("Name auf der Tafel", `pt${i}n`, { ph: i === 1 ? "z. B. Büro" : "z. B. Uni" }),
       placeSearch("Ziel", `pt${i}t`),
+      range("Gehzeit von der Ziel-Haltestelle", `pt${i}b`, 0, 40, 1, " min"),
       placeSearch("Start", `pt${i}f`, "Leer = Standort der Tafel."),
+      range("Gehzeit zur Start-Haltestelle", `pt${i}a`, 0, 40, 1, " min"),
+      h("p", { class: "hint" }, "Am genauesten und datenschonend: als Start/Ziel die Haltestelle wählen und die Gehzeit einmal messen "
+        + "und eintragen – dann verlässt eure Adresse die Tafel nie. 0 min = Start/Ziel ist eine Adresse (auf ~100 m gerundet, der Router rechnet die Gehzeit)."),
       field("Wann anzeigen", `pt${i}w`, { ph: "Mo-Fr 06:30-09:00", hint: "Tage + Zeitfenster, z. B. „Mo-Fr 06:30-09:00“ oder „Sa,So 09:00-12:00“. Ziel leer = aus." }));
   }
 
