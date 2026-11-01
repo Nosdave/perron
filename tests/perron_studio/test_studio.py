@@ -413,3 +413,27 @@ async def test_tile_saved_by_031_is_rebuilt_from_its_automation(hass, esphome_en
     await hass.async_block_till_done()
     t2 = engine.get("tv")
     assert not t2.get("_rebuilt") and "perron_studio_kachel: v1:" in p.read_text(encoding="utf-8")
+
+
+async def test_setup_survives_esphome_not_ready(hass, esphome_entry):
+    """At HA start the ESPHome API may not be connected yet: setup must not fail, token comes later."""
+    from datetime import timedelta
+    from homeassistant.exceptions import HomeAssistantError
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+    tries = []
+
+    async def not_ready(call: ServiceCall) -> None:
+        tries.append(1)
+        if len(tries) == 1:
+            raise HomeAssistantError("Authenticated connection not ready yet")
+
+    hass.services.async_register("esphome", "perron_set_studio_token", not_ready)
+    hass.services.async_register("esphome", "perron_push_json", not_ready)
+    entry = await _setup(hass, esphome_entry)
+    assert entry.state.value == "loaded"
+    data = hass.data[DOMAIN][entry.entry_id]
+    assert data["token_ok"] is False
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=31))
+    await hass.async_block_till_done()
+    assert data["token_ok"] is True and len(tries) == 2

@@ -20,7 +20,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.service import async_register_admin_service
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 
 from .board import Board
 from .const import CONF_DEVICE, CONF_HOST, CONF_TOKEN, DOMAIN, PANEL_JS, PANEL_URL
@@ -38,14 +38,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"board": board, "engine": engine,
                                                          "video": VideoPlayer(hass, board)}
 
-    # hand the access token to the board (encrypted ESPHome API); retry until the board is online
+    # hand the access token to the board (encrypted ESPHome API); retry until the board is online.
+    # At HA start the ESPHome connection is often not up yet ("connection not ready"): that must
+    # not fail the setup - the retry below (30 s at first, then every 5 min) catches up.
     async def _ensure_token(*_):
-        if await board.set_token():
-            data["token_ok"] = True
+        try:
+            if await board.set_token():
+                data["token_ok"] = True
+        except Exception as err:  # noqa: BLE001 - board offline / API not ready yet
+            _LOGGER.debug("Perron Studio: token not sent yet (%s), will retry", err)
 
     data = hass.data[DOMAIN][entry.entry_id]
     data["token_ok"] = False
     await _ensure_token()
+    entry.async_on_unload(async_call_later(hass, 30, _ensure_token))
     entry.async_on_unload(async_track_time_interval(hass, _ensure_token, timedelta(minutes=5)))
 
     await engine.async_load()
@@ -59,7 +65,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass,
             frontend_url_path=PANEL_URL,
             webcomponent_name="perron-studio-panel",
-            module_url=f"{PANEL_JS}?v=0.4.0",
+            module_url=f"{PANEL_JS}?v=0.4.1",
             sidebar_title="Perron Studio",
             sidebar_icon="mdi:view-dashboard-variant",
             require_admin=True,

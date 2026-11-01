@@ -55,11 +55,10 @@
     }));
   }
 
-  // ---- commutes by public transport: name, destination/start by address search, time window
-  function placeSearch(label, k, hint) {
-    const cur = (state[k] || "").split("|")[1] || "";
-    const shown = h("b", {}, cur || "–");
-    const inp = h("input", { type: "text", placeholder: "Adresse oder Haltestelle suchen …", autocomplete: "off" });
+  // ---- address / stop search (Transitous geocoder): onPick({lat, lon, name, stop})
+  const routerBase = () => (state.router || "https://api.transitous.org").replace(/\/+$/, "");
+  function geoSearch(onPick, ph = "Adresse oder Haltestelle suchen …") {
+    const inp = h("input", { type: "text", placeholder: ph, autocomplete: "off" });
     const list = h("div", { class: "results" });
     let timer;
     inp.addEventListener("input", () => {
@@ -67,33 +66,95 @@
       const q = inp.value.trim();
       if (q.length < 3) { list.innerHTML = ""; return; }
       timer = setTimeout(async () => {
-        const base = (state.router || "https://api.transitous.org").replace(/\/+$/, "");
         try {
-          const r = await (await fetch(`${base}/api/v1/geocode?text=${enc(q)}`)).json();
+          const r = await (await fetch(`${routerBase()}/api/v1/geocode?text=${enc(q)}`)).json();
           list.innerHTML = "";
           for (const p of r.slice(0, 6)) {
             const area = (p.areas || []).filter((a) => a.default).map((a) => a.name).join(", ");
-            const name = p.type === "STOP" ? `${p.name} (Haltestelle)` : [p.name, p.street && p.houseNumber ? "" : "", area].filter(Boolean).join(", ");
-            list.append(h("button", { class: "ghost res", onclick: async () => {
-              const v = `${(+p.lat).toFixed(5)},${(+p.lon).toFixed(5)}|${p.name}`;
-              state[k] = v; await set(E[k], v); shown.textContent = p.name; list.innerHTML = ""; inp.value = ""; saved(shown);
+            const name = p.type === "STOP" ? `${p.name} (Haltestelle)` : [p.name, area].filter(Boolean).join(", ");
+            list.append(h("button", { class: "ghost res", onclick: () => {
+              list.innerHTML = ""; inp.value = "";
+              onPick({ lat: +p.lat, lon: +p.lon, name: p.name, stop: p.type === "STOP" });
             } }, name));
           }
           if (!r.length) list.append(h("small", {}, "Nichts gefunden."));
-        } catch { list.innerHTML = '<small>Suche nicht erreichbar.</small>'; }
+        } catch { list.innerHTML = "<small>Suche nicht erreichbar.</small>"; }
       }, 350);
+    });
+    return [inp, list];
+  }
+
+  // Walking time between two points, once, by the routing server (direct walk, no transit).
+  async function walkMinutes(a, b) {
+    const q = `fromPlace=${a.lat.toFixed(5)},${a.lon.toFixed(5)}&toPlace=${b.lat.toFixed(5)},${b.lon.toFixed(5)}`;
+    const r = await (await fetch(`${routerBase()}/api/v1/plan?${q}&directModes=WALK&transitModes=WALK&maxDirectTime=7200`)).json();
+    const d = (r.direct || [])[0];
+    if (!d) throw new Error("kein Fußweg gefunden");
+    const dist = (d.legs || []).reduce((s, l) => s + (l.distance || 0), 0);
+    return { min: Math.max(1, Math.round(d.duration / 60)), m: Math.round(dist) };
+  }
+
+  // "messen" next to a walking time: asks for an address (used once, NOT stored), measures the
+  // walk to/from the stop and offers the result; nothing changes until "übernehmen" is pressed.
+  // stopOf() -> {lat, lon, name} | null; dir "to" = address -> stop, "from" = stop -> address.
+  function measureWalk(stopOf, dir, apply) {
+    const box = h("div", { class: "measure", hidden: true });
+    const btn = h("button", { class: "ghost", type: "button", onclick: () => {
+      const st = stopOf();
+      if (!st) { toast("Erst die Haltestelle wählen"); return; }
+      box.hidden = !box.hidden;
+      if (box.hidden) return;
+      box.innerHTML = "";
+      const out = h("div", {});
+      const [inp, list] = geoSearch(async (pl) => {
+        out.textContent = "misst …";
+        try {
+          const w = dir === "to" ? await walkMinutes(pl, st) : await walkMinutes(st, pl);
+          out.innerHTML = "";
+          out.append(h("span", {}, `${pl.name} ${dir === "to" ? "→" : "←"} ${st.name}: ≈ ${w.min} min (${w.m} m) `),
+            h("button", { class: "primary", type: "button", onclick: async () => { await apply(w.min); box.hidden = true; } }, "übernehmen"));
+        } catch (e) { out.textContent = "Messung nicht möglich: " + e.message; }
+      }, dir === "to" ? "Von welcher Adresse? (wird nicht gespeichert)" : "Zu welcher Adresse? (wird nicht gespeichert)");
+      box.append(inp, list, out, h("small", {}, "Die Adresse wird nur für diese eine Messung an den Routing-Server geschickt und nirgends gespeichert."));
+      inp.focus();
+    } }, "📏 messen");
+    return [btn, box];
+  }
+
+  // a minutes value with "messen": number box + button + measurement area
+  function walkField(label, k, stopOf, dir, max = 40) {
+    const out = h("b", {}, `${state[k] || 0} min`);
+    const inp = h("input", { type: "number", min: 0, max, step: 1, value: state[k] || 0, style: "width:5em" });
+    const save = async (v) => { inp.value = v; state[k] = v; out.textContent = `${v} min`; await set(E[k], v); saved(out); };
+    inp.addEventListener("change", () => save(Math.max(0, Math.min(max, +inp.value || 0))));
+    const [btn, box] = measureWalk(stopOf, dir, save);
+    return h("label", { class: "f" }, h("span", {}, label, " ", out), h("span", { class: "row" }, inp, " ", btn), box);
+  }
+
+  // ---- commutes by public transport: name, destination/start by address search, time window
+  function placeSearch(label, k, hint) {
+    const cur = (state[k] || "").split("|")[1] || "";
+    const shown = h("b", {}, cur || "–");
+    const [inp, list] = geoSearch(async (p) => {
+      const v = `${p.lat.toFixed(5)},${p.lon.toFixed(5)}|${p.name}`;
+      state[k] = v; await set(E[k], v); shown.textContent = p.name; saved(shown);
     });
     const clear = h("button", { class: "ghost", onclick: async () => { state[k] = ""; await set(E[k], ""); shown.textContent = "–"; } }, "leeren");
     return h("label", { class: "f" }, h("span", {}, label, ": ", shown, " ", clear), inp, list, hint ? h("small", {}, hint) : "");
   }
+  const placeOf = (k) => () => {
+    const [ll, name] = (state[k] || "").split("|");
+    const [lat, lon] = (ll || "").split(",").map(Number);
+    return isFinite(lat) && isFinite(lon) && ll ? { lat, lon, name: name || "Haltestelle" } : null;
+  };
   function commuteBlock(i) {
     return h("div", { class: "grp-box" },
       h("div", { class: "grp" }, `Pendeln ${i} (Bus & Bahn)`),
       field("Name auf der Tafel", `pt${i}n`, { ph: i === 1 ? "z. B. Büro" : "z. B. Uni" }),
       placeSearch("Ziel", `pt${i}t`),
-      range("Gehzeit von der Ziel-Haltestelle", `pt${i}b`, 0, 40, 1, " min"),
+      walkField("Gehzeit von der Ziel-Haltestelle", `pt${i}b`, placeOf(`pt${i}t`), "from"),
       placeSearch("Start", `pt${i}f`, "Leer = Standort der Tafel."),
-      range("Gehzeit zur Start-Haltestelle", `pt${i}a`, 0, 40, 1, " min"),
+      walkField("Gehzeit zur Start-Haltestelle", `pt${i}a`, placeOf(`pt${i}f`), "to"),
       h("p", { class: "hint" }, "Am genauesten und datenschonend: als Start/Ziel die Haltestelle wählen und die Gehzeit einmal messen "
         + "und eintragen – dann verlässt eure Adresse die Tafel nie. 0 min = Start/Ziel ist eine Adresse (auf ~100 m gerundet, der Router rechnet die Gehzeit)."),
       field("Wann anzeigen", `pt${i}w`, { ph: "Mo-Fr 06:30-09:00", hint: "Tage + Zeitfenster, z. B. „Mo-Fr 06:30-09:00“ oder „Sa,So 09:00-12:00“. Ziel leer = aus." }));
@@ -218,6 +279,65 @@
     setTimeout(() => el.remove(), 2200);
   }
 
+  // ---- departure stops: walking time per stop ("id:min" in Haltestellen), each measurable
+  const DATA = new URL("../data/", helperUrl).href;
+  let stopsDb = null, stationsDb = null;
+  async function db() {
+    if (!stopsDb) {
+      try {
+        const [s, t] = await Promise.all([fetch(DATA + "stops.json").then((r) => r.json()), fetch(DATA + "stations.json").then((r) => r.json())]);
+        stopsDb = Object.fromEntries(s.stops.map((x) => [x.id, x]));
+        stationsDb = Object.fromEntries(t.stations.map((x) => [x.id, x]));
+      } catch { stopsDb = {}; stationsDb = {}; }
+    }
+  }
+  const parsePoints = () => (state.points || "").split(",").map((x) => x.trim()).filter(Boolean)
+    .map((x) => { const [id, m] = x.split(":"); return { id: id.trim(), min: m === undefined || m === "" ? "" : +m }; });
+  async function savePoints(list) {
+    const v = list.map((p) => (p.min === "" ? p.id : `${p.id}:${p.min}`)).join(",");
+    state.points = v; await set(E.points, v);
+  }
+  function stopWalks() {
+    const box = h("div", { class: "grp-box" }, h("div", { class: "grp" }, "Gehzeit je Haltestelle"),
+      h("small", {}, "Leer = Standardwert unten. „📏 messen“ fragt einmal nach eurer Adresse (wird nicht gespeichert) und schlägt die Gehzeit vor."));
+    const rows = h("div", {});
+    box.append(rows);
+    (async () => {
+      await db();
+      const pts = parsePoints();
+      if (!pts.length) { rows.append(h("small", {}, "Noch keine Haltestellen.")); return; }
+      for (const p of pts) {
+        const s = stopsDb[p.id] || stopsDb[p.id.replace(/[A-Za-z]+$/, "")];
+        const lines = s ? [...new Set(s.l.map((x) => `${x[0]} → ${x[1]}`))].slice(0, 3).join(", ") : "";
+        const inp = h("input", { type: "number", min: 0, max: 30, step: 1, value: p.min, placeholder: "Std.", style: "width:5em" });
+        const save = async (v) => {
+          const all = parsePoints();
+          const me = all.find((x) => x.id === p.id);
+          if (me) me.min = v;
+          inp.value = v;
+          await savePoints(all); saved(inp);
+        };
+        inp.addEventListener("change", () => save(inp.value === "" ? "" : Math.max(0, Math.min(30, +inp.value))));
+        const [btn, mbox] = measureWalk(() => (s ? { lat: s.lat, lon: s.lon, name: s.fr } : null), "to", save);
+        rows.append(h("div", { class: "f" },
+          h("span", {}, h("b", {}, s ? s.fr : p.id), lines ? h("small", {}, lines) : ""),
+          h("span", { class: "row" }, inp, " min ", btn), mbox));
+      }
+    })();
+    return box;
+  }
+  function trainWalk() {
+    const k = "wtrain";
+    const out = h("b", {}, `${state[k] || 0} min`);
+    const inp = h("input", { type: "number", min: 0, max: 30, step: 1, value: state[k] || 0, style: "width:5em" });
+    const save = async (v) => { inp.value = v; state[k] = v; out.textContent = `${v} min`; await set(E[k], v); saved(out); };
+    inp.addEventListener("change", () => save(Math.max(0, Math.min(30, +inp.value || 0))));
+    let st = null;
+    db().then(() => { const x = stationsDb[state.station]; if (x) st = { lat: x.lat, lon: x.lon, name: x.name }; });
+    const [btn, box] = measureWalk(() => st, "to", save);
+    return h("label", { class: "f" }, h("span", {}, "Gehzeit zum Bahnhof ", out), h("span", { class: "row" }, inp, " ", btn), box);
+  }
+
   // ---- steps ----
   const steps = [
     { t: "Haltestellen", b: () => [
@@ -229,6 +349,7 @@
         field("Linienfilter", "lines", { ph: "leer = alle Linien", hint: "z. B. 81,71" }),
         field("Zielfilter", "dfilter", { ph: "z. B. 71=Delta", hint: "Linie nur in Richtung dieser Ziele (Teil des Namens). Mehrere mit ; trennen." }),
         field("Standort (Breite,Länge)", "loc", { ph: "50.85,4.35", hint: "Für Wetter und BE-Alert. Leer = Brüssel-Zentrum." })),
+      stopWalks(),
       range("Gehzeit (Standard für Haltestellen ohne eigene Angabe)", "walk", 0, 15, 1, " min"),
     ] },
     { t: "Zug & Pendeln", b: () => [
@@ -237,7 +358,7 @@
       h("p", { class: "hint" }, "Gleiche Hilfsseite wie bei den Haltestellen: die nächsten Bahnhöfe stehen unter „Zug (SNCB)“."),
       field("Bahnhof (iRail-ID)", "station", { ph: "BE.NMBS.0088…", hint: "Mit dem Standort-Assistenten auswählbar." }),
       field("Zugfilter", "tfilter", { ph: "z. B. p2 oder S5,S19", hint: "p2 = nur Gleis 2; Liniennamen oder Ziele, kommagetrennt." }),
-      range("Gehzeit zum Bahnhof", "wtrain", 0, 30, 1, " min"),
+      trainWalk(),
       toggle("Zug immer anzeigen", "pintrain", "Reserviert eine Zeile für den nächsten Zug (Zugfilter, z. B. stadteinwärts), auch wenn er später fährt."),
       toggle("SNCB-Logo beim Zug", "sncblogo", "Zeigt das SNCB-Oval-B vor dem Zugziel."),
       commuteBlock(1), commuteBlock(2),
