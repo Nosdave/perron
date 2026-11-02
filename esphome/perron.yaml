@@ -21,7 +21,7 @@ esphome:
   friendly_name: ${friendly_name}
   project:
     name: nosdave.perron
-    version: "0.6.3"
+    version: "0.7.2"
   on_boot:
     priority: 600
     then:
@@ -141,6 +141,8 @@ packages:
   light:      !include packages/light.yaml
   cards:      !include packages/cards.yaml
   video:      !include packages/video.yaml
+  cooling:    !include packages/cooling.yaml
+  audio:      !include packages/audio.yaml
 
 # Diagnose
 sensor:

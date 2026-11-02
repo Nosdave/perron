@@ -1,0 +1,77 @@
+# Gehäuse-Kühlung: SHT40 (Temperatur/Feuchte) + 5-V-Lüfter.
+# Anschluss:
+#   - SHT40: STEMMA-QT-Kabel an die zweite Buchse des Lichtsensors (gleicher I2C-Bus, Adresse 0x44).
+#   - Lüfter: Adafruit MOSFET Driver per 3-Pin-JST-PH-Kabel an die A0-Buchse (GPIO12, 5 V, GND);
+#     Lüfter rot an „+“, schwarz an „-“ der Klemme. Mehrere Lüfter parallel an dieselbe Klemme.
+#   - Kabel und Driver nicht über/an die WLAN-Antenne (Platinenende gegenüber USB) legen.
+# Ohne Sensor/Lüfter läuft alles weiter (Sensor = unbekannt, Lüfter bleibt aus).
+sensor:
+  - platform: sht4x
+    address: 0x44
+    update_interval: 15s
+    temperature:
+      id: case_temp
+      name: "Temperatur Gehäuse"
+      accuracy_decimals: 1
+      filters:
+        - or:
+            - throttle_with_priority: 300s
+            - delta: 0.3
+    humidity:
+      name: "Feuchte Gehäuse"
+      accuracy_decimals: 0
+      filters:
+        - or:
+            - throttle_with_priority: 300s
+            - delta: 2
+
+output:
+  # nur an/aus: die kleinen 2-Draht-Lüfter (25/30 mm) bleiben bei PWM schon unter ~80 % stehen
+  - platform: gpio
+    id: fan_out
+    pin: GPIO12
+
+fan:
+  - platform: binary
+    id: case_fan
+    output: fan_out
+    name: "Lüfter"
+    icon: mdi:fan
+    restore_mode: ALWAYS_OFF
+
+switch:
+  - platform: template
+    id: sw_fan_auto
+    name: "Lüfter automatisch"
+    icon: mdi:fan-auto
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+
+number:
+  - platform: template
+    id: cfg_fan_on
+    name: "Lüfter ab Temperatur"
+    icon: mdi:thermometer-chevron-up
+    unit_of_measurement: "°C"
+    min_value: 20
+    max_value: 60
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 35
+    entity_category: config
+
+interval:
+  # Automatik: an ab "Lüfter ab Temperatur", aus erst 3 °C darunter (Hysterese).
+  # Ohne SHT40 dient die ESP-Temperatur als Notbremse (> 70 °C = an).
+  - interval: 5s
+    then:
+      - lambda: |-
+          if (!id(sw_fan_auto).state) return;
+          float t = id(case_temp).state, on = id(cfg_fan_on).state;
+          bool want = std::isnan(t) ? id(esp_temp).state > 70
+                                    : (t >= on || (id(case_fan).state && t > on - 3));
+          if (want == id(case_fan).state) return;
+          if (want) id(case_fan).turn_on().perform();
+          else id(case_fan).turn_off().perform();

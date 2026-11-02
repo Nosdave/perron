@@ -48,6 +48,7 @@ sensor:
 
   # Chip-Temperatur des ESP32-S3 (grob, liegt über der Raumtemperatur) – für Gehäuse/Lüfter-Entscheidung
   - platform: internal_temperature
+    id: esp_temp
     name: "Temperatur ESP"
     entity_category: diagnostic
     update_interval: 60s

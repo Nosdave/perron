@@ -1,0 +1,18 @@
+# Audio (2× MAX98357A, I2S, mono): Vorbereitung.
+# Anschluss beider Verstärker parallel: LRC -> A1 (GPIO3), BCLK -> A2 (GPIO9), DIN -> A3 (GPIO10),
+# SD -> A4 (GPIO11), GAIN frei, Vin/GND vom 5-V-Netzteil (+ GND-Brücke zur MatrixPortal).
+# Bis die Wiedergabe gebaut ist: alle Leitungen fest auf LOW. SD = LOW schaltet die Verstärker ab;
+# offene Pins würden als Audiodaten gelesen (Krachen).
+output:
+  - platform: gpio
+    id: amp_sd
+    pin: GPIO11
+  - platform: gpio
+    id: amp_lrc_idle
+    pin: GPIO3
+  - platform: gpio
+    id: amp_bclk_idle
+    pin: GPIO9
+  - platform: gpio
+    id: amp_din_idle
+    pin: GPIO10
