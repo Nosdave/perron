@@ -262,7 +262,9 @@ inline void video_setup() {
     return;  // v.jpeg stays null: video_start refuses
   }
   v.jpeg = new (jm) JPEGDEC();
-  xTaskCreatePinnedToCore(video_task, "perron_video", 6144, nullptr, 3, nullptr, 0);
+  // stack in PSRAM: internal RAM is scarce (HUB75 DMA, WiFi, I2S); the task never touches flash
+  xTaskCreatePinnedToCoreWithCaps(video_task, "perron_video", 6144, nullptr, 3, nullptr, 0,
+                                  MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 }
 
 static bool video_hex(const std::string &hex, uint8_t *out, size_t n) {

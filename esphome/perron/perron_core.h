@@ -28,6 +28,7 @@
 
 #include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"
+#include "freertos/idf_additions.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -1153,7 +1154,10 @@ inline void start() {
   static bool started = false;
   if (started) return;
   started = true;
-  xTaskCreatePinnedToCore(fetch_task, "perron_fetch", 12288, nullptr, 1, nullptr, 0);
+  // stack in PSRAM: internal RAM is scarce (HUB75 DMA, WiFi, I2S); the task never writes flash
+  if (xTaskCreatePinnedToCoreWithCaps(fetch_task, "perron_fetch", 12288, nullptr, 1, nullptr, 0,
+                                      MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS)
+    xTaskCreatePinnedToCore(fetch_task, "perron_fetch", 12288, nullptr, 1, nullptr, 0);
 }
 
 }  // namespace perron

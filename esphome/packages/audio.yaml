@@ -1,18 +1,46 @@
-# Audio (2× MAX98357A, I2S, mono): Vorbereitung.
+# Audio (2× MAX98357A, I2S, mono): Testton.
 # Anschluss beider Verstärker parallel: LRC -> A1 (GPIO3), BCLK -> A2 (GPIO9), DIN -> A3 (GPIO10),
 # SD -> A4 (GPIO11), GAIN frei, Vin/GND vom 5-V-Netzteil (+ GND-Brücke zur MatrixPortal).
-# Bis die Wiedergabe gebaut ist: alle Leitungen fest auf LOW. SD = LOW schaltet die Verstärker ab;
-# offene Pins würden als Audiodaten gelesen (Krachen).
+# SD: LOW = Verstärker aus (Ruhe, kein Rauschen); losgelassen (open drain) = an, mono (L+R)/2 über
+# den 1-MΩ-Widerstand der Platine. Nie aktiv HIGH treiben (3,3 V = nur linker Kanal).
 output:
   - platform: gpio
     id: amp_sd
-    pin: GPIO11
-  - platform: gpio
-    id: amp_lrc_idle
-    pin: GPIO3
-  - platform: gpio
-    id: amp_bclk_idle
-    pin: GPIO9
-  - platform: gpio
-    id: amp_din_idle
-    pin: GPIO10
+    pin:
+      number: GPIO11
+      mode:
+        output: true
+        open_drain: true
+
+i2s_audio:
+  - id: i2s_out
+    i2s_lrclk_pin: GPIO3
+    i2s_bclk_pin: GPIO9
+
+speaker:
+  - platform: i2s_audio
+    id: amp
+    i2s_audio_id: i2s_out
+    dac_type: external
+    i2s_dout_pin: GPIO10
+    sample_rate: 16000
+    channel: mono
+    buffer_duration: 100ms
+
+rtttl:
+  id: beeper
+  speaker: amp
+  gain: 0.3
+  on_finished_playback:
+    - delay: 200ms
+    - output.turn_off: amp_sd
+
+button:
+  - platform: template
+    name: "Lautsprecher testen"
+    icon: mdi:speaker
+    entity_category: diagnostic
+    on_press:
+      - output.turn_on: amp_sd
+      - delay: 50ms
+      - rtttl.play: 'test:d=16,o=6,b=180:c,e,g'
