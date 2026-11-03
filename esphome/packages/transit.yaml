@@ -5,6 +5,10 @@
 # ArduinoJson mitbaut; die Abrufe selbst nutzen esp_http_client direkt (Streaming in PSRAM).
 http_request:
   verify_ssl: true
+  # Firmware-Download (Auto-Update) und Bildkarten laufen im Haupt-Loop: ein langsamer TLS-Abruf
+  # riss den Task-Watchdog (31.10. und 03.11. nachts: Neustarts im 15-min-Takt) -> während eines
+  # Abrufs großzügiger.
+  watchdog_timeout: 30s
   useragent: "perron/0.5 (+https://github.com/Nosdave/perron)"
 
 json:
