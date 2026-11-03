@@ -1,4 +1,4 @@
-# Audio (2× MAX98357A, I2S, mono): Testton.
+# Audio (2× MAX98357A, I2S, mono): Testton und RTTTL-Melodien aus Home Assistant.
 # Anschluss beider Verstärker parallel: LRC -> A1 (GPIO3), BCLK -> A2 (GPIO9), DIN -> A3 (GPIO10),
 # SD -> A4 (GPIO11), GAIN frei, Vin/GND vom 5-V-Netzteil (+ GND-Brücke zur MatrixPortal).
 # SD: LOW = Verstärker aus (Ruhe, kein Rauschen); losgelassen (open drain) = an, mono (L+R)/2 über
@@ -30,7 +30,7 @@ speaker:
 rtttl:
   id: beeper
   speaker: amp
-  gain: 0.3
+  gain: 0.5
   on_finished_playback:
     - delay: 200ms
     - output.turn_off: amp_sd
@@ -43,4 +43,15 @@ button:
     on_press:
       - output.turn_on: amp_sd
       - delay: 50ms
-      - rtttl.play: 'test:d=16,o=6,b=180:c,e,g'
+      - rtttl.play: 'kammerton:d=2,o=4,b=60:a'   # 2 s, 440 Hz
+
+# Home Assistant: beliebige RTTTL-Melodie, z. B. "gong:d=4,o=5,b=100:e6,c6"
+api:
+  actions:
+    - action: ton_abspielen
+      variables:
+        melodie: string
+      then:
+        - output.turn_on: amp_sd
+        - delay: 50ms
+        - rtttl.play: !lambda 'return melodie;'
