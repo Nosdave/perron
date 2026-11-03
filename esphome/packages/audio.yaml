@@ -37,6 +37,22 @@ rtttl:
     - delay: 200ms
     - output.turn_off: amp_sd
 
+number:
+  - platform: template
+    id: cfg_tone_volume
+    name: "Lautstärke Töne"
+    icon: mdi:volume-high
+    unit_of_measurement: "%"
+    min_value: 1
+    max_value: 100
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 50
+    entity_category: config
+    on_value:
+      - lambda: 'id(beeper).set_gain(x / 100.0f);'
+
 button:
   - platform: template
     name: "Lautsprecher testen"
@@ -46,6 +62,7 @@ button:
       - output.turn_on: amp_sd
       - delay: 50ms
       - rtttl.play: 'kammerton:d=2,o=4,b=60:a'   # 2 s, 440 Hz
+      - script.execute: amp_soft_edges
 
 # Home Assistant: beliebige RTTTL-Melodie, z. B. "gong:d=4,o=5,b=100:e6,c6"
 api:
@@ -57,3 +74,16 @@ api:
         - output.turn_on: amp_sd
         - delay: 50ms
         - rtttl.play: !lambda 'return melodie;'
+        - script.execute: amp_soft_edges
+
+# Weiche Flanken auf LRC/BCLK/DIN (schwächste Treiberstufe, ~5 mA): auf ungeschirmten Jumper-
+# kabeln schwingen die steilen Standard-Flanken über, der Verstärker zählt Takte doppelt -> Kratzen.
+# Der I2S-Treiber richtet die Pins bei jedem Start neu ein, deshalb kurz danach (erneut) setzen.
+script:
+  - id: amp_soft_edges
+    mode: restart
+    then:
+      - delay: 20ms
+      - lambda: |-
+          for (auto pin : {GPIO_NUM_3, GPIO_NUM_9, GPIO_NUM_10})
+            gpio_set_drive_capability(pin, GPIO_DRIVE_CAP_0);
