@@ -52,6 +52,20 @@ number:
     entity_category: config
     on_value:
       - lambda: 'id(beeper).set_gain(x / 100.0f);'
+  # Treiberstärke LRC/BCLK/DIN: 0 = weichste Flanken (~5 mA) … 3 = härteste (~40 mA), 2 = ESP-Standard.
+  # Zu weich -> Verstärker verliert den Takt (stumm); zu hart auf langen Jumperkabeln -> Kratzen.
+  - platform: template
+    id: cfg_amp_drive
+    name: "Audio Treiberstärke"
+    icon: mdi:sine-wave
+    min_value: 0
+    max_value: 3
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 2
+    entity_category: config
 
 button:
   - platform: template
@@ -76,8 +90,8 @@ api:
         - rtttl.play: !lambda 'return melodie;'
         - script.execute: amp_soft_edges
 
-# Weiche Flanken auf LRC/BCLK/DIN (schwächste Treiberstufe, ~5 mA): auf ungeschirmten Jumper-
-# kabeln schwingen die steilen Standard-Flanken über, der Verstärker zählt Takte doppelt -> Kratzen.
+# Treiberstärke auf LRC/BCLK/DIN nach "Audio Treiberstärke": auf ungeschirmten Jumperkabeln schwingen
+# steile Flanken über (Kratzen), zu weiche erreichen den Verstärker nicht mehr sauber (stumm).
 # Der I2S-Treiber richtet die Pins bei jedem Start neu ein, deshalb kurz danach (erneut) setzen.
 script:
   - id: amp_soft_edges
@@ -85,5 +99,6 @@ script:
     then:
       - delay: 20ms
       - lambda: |-
+          auto cap = (gpio_drive_cap_t) (int) id(cfg_amp_drive).state;
           for (auto pin : {GPIO_NUM_3, GPIO_NUM_9, GPIO_NUM_10})
-            gpio_set_drive_capability(pin, GPIO_DRIVE_CAP_0);
+            gpio_set_drive_capability(pin, cap);
