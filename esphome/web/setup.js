@@ -19,6 +19,7 @@
     b1: N("Helligkeit bei 1 lx (dunkel)"), b10: N("Helligkeit bei 10 lx (dämmrig)"), b100: N("Helligkeit bei 100 lx (Raumlicht)"),
     b1000: N("Helligkeit bei 1000 lx (Tageslicht)"), nbright: N("Helligkeit Nachtzeit"), glass: N("Helligkeit Frontscheibe"), walk: N("Gehzeit zur Haltestelle"), wtrain: N("Gehzeit zum Bahnhof"),
     horizon: N("Vorschau"), dwell: N("Infozeile Wechsel"),
+    vol: N("Lautstärke Töne"), drive: N("Audio Treiberstärke"), fanon: N("Lüfter ab Temperatur"), fanauto: SW("Lüfter automatisch"),
     wx: SW("Wetter (KMI)"), bea: SW("BE-Alert"), disr: SW("STIB-Störungen"), news: SW("Schlagzeilen"),
     second: SW("Zweite Abfahrt"), showwalk: SW("Gehzeit anzeigen"), pintrain: SW("Zug immer anzeigen"), sncblogo: SW("SNCB-Logo beim Zug"), autoup: SW("Automatische Updates"), autob: SW("Helligkeit automatisch"), status: SW("Statusleiste"), pager: SW("Infozeile"), freeon: SW("Freitext anzeigen"),
   };
@@ -338,6 +339,34 @@
     return h("label", { class: "f" }, h("span", {}, "Gehzeit zum Bahnhof ", out), h("span", { class: "row" }, inp, " ", btn), box);
   }
 
+  // ---- hardware: speaker + case cooling (entities only exist with the audio/cooling packages)
+  function hardwareStep() {
+    const live = h("b", {}, "…");
+    const fan = h("input", { type: "checkbox" });
+    const tick = async () => {
+      const [t, rh, f] = await Promise.all([get(["sensor", "Temperatur Gehäuse"]), get(["sensor", "Feuchte Gehäuse"]), get(["fan", "Lüfter"])]);
+      live.textContent = `${t.state ?? "–"} · ${rh.state ?? "–"} · Lüfter ${f.state === "ON" ? "an" : "aus"}`;
+      fan.checked = f.state === "ON";
+    };
+    tick(); clearInterval(window.__hw); window.__hw = setInterval(() => { if (!document.body.contains(live)) clearInterval(window.__hw); else tick(); }, 5000);
+    fan.addEventListener("change", async () => { await post(`/fan/${enc("Lüfter")}/${fan.checked ? "turn_on" : "turn_off"}`); });
+    return [
+      h("p", { class: "lead" }, "Lautsprecher und Gehäuse-Lüfter."),
+      h("div", { class: "grp-box" },
+        h("div", { class: "grp" }, "Lautsprecher"),
+        range("Lautstärke Töne", "vol", 1, 100, 1, " %"),
+        h("button", { class: "ghost", onclick: async () => { await post(`/button/${enc("Lautsprecher testen")}/press`); toast("Testton (2 s)"); } }, "🔊 Testton"),
+        range("Treiberstärke der Audio-Leitungen", "drive", 0, 3, 1, ""),
+        h("small", {}, "2 = Standard. Kratzt es, eine Stufe weniger probieren; bleibt es stumm, wieder höher.")),
+      h("div", { class: "grp-box" },
+        h("div", { class: "grp" }, "Kühlung"),
+        h("p", { class: "hint" }, "Jetzt: ", live),
+        toggle("Lüfter automatisch", "fanauto", "Schaltet ab der Temperatur unten ein und 3 °C darunter wieder aus."),
+        range("Lüfter ab", "fanon", 20, 60, 1, " °C"),
+        h("label", { class: "t" }, fan, h("span", {}, "Lüfter jetzt an", h("small", {}, "Von Hand; bei „automatisch“ übernimmt die Automatik nach wenigen Sekunden wieder.")))),
+    ];
+  }
+
   // ---- steps ----
   const steps = [
     { t: "Haltestellen", b: () => [
@@ -387,6 +416,7 @@
       choice("Nachtmodus", "nmode"), field("Nachtzeit", "night", { ph: "23:00-06:00" }),
       field("Kurznamen", "alias", { ph: "Gare du Midi=Midi;Gare du Nord=Nord", hint: "Lange Ziele kürzen: Original=Kurz, mit ; getrennt." }),
     ] },
+    { t: "Hardware", b: hardwareStep },
     { t: "Status", b: () => {
       const st = h("pre", { class: "status" }, "…");
       const tick = async () => {
@@ -421,7 +451,7 @@
                                       h("div", { class: "sub" }, location.host)), app);
     app.append(h("p", { class: "lead" }, "Lade Einstellungen …"));
     await loadAll();
-    go(state.points || state.station ? 4 : 0);   // configured -> straight to status
+    go(state.points || state.station ? steps.length - 1 : 0);   // configured -> straight to status
     readHash();
   }
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", boot); else boot();
