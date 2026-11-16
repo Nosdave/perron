@@ -1,10 +1,18 @@
 pos,part,specification,qty,notes
 1,LED matrix panel,64x64 RGB HUB75 P4 (256x256 mm) 1/32 scan,3,chained horizontally -> 192x64 px / 768x256 mm
 2,Controller,Adafruit MatrixPortal S3 (ESP32-S3 N8R2),1,address-E jumper on pad 8 for 64x64 panels
-3,Power supply,Mean Well LRS-150-5 (5 V / 30 A),1,enclosed; earth connected; adjust to 5.0-5.1 V before connecting panels
-4,Inline fuse,ATO/ATC blade fuse holder 12 AWG + 25 A fuse,1,on the +5 V line to the panels (20 A with 14 AWG wiring)
-5,Power wiring,14-12 AWG red/black + ferrules,1,one pair per panel (star wiring from the PSU)
-6,Controller power,USB-C cable or USB-C pigtail from the 5 V PSU,1,do not feed 5 V into the MatrixPortal screw terminals
-7,Ambient light sensor (optional),Adafruit VEML7700 (STEMMA QT) + 100 mm STEMMA QT cable,1,automatic brightness; keep away from the LEDs
-8,Front panel (optional),Smoked grey cast acrylic 3 mm (~21 % transmission e.g. PLEXIGLAS GS 7C83),1,glossy; no diffuser for crisp pixels
-9,HUB75 ribbon cables,2x8 IDC,2,usually included with the panels
+3,Power supply,Mean Well LRS-150-5 (5 V / 22 A),1,adjust to 5.1-5.2 V before connecting panels; mains terminals must sit inside a closed box (pos 13)
+4,Inline fuse,ATO/ATC blade fuse holder 12 AWG + 20 A fuse,1,on the +5 V trunk right after the supply
+5,Power wiring,2x4 mm2 (12 AWG) trunk + 1.5-2.5 mm2 per panel + ferrules,1,trunk to a distribution block in the case; one pair per panel from there (star wiring)
+6,Controller feed diode,Schottky 1N5822 (3 A / 40 V) or SS34 (SMD),1,PSU +5 V -> anode; cathode (ring) -> MatrixPortal +5V screw terminal; blocks USB VBUS from feeding the panels
+7,Controller feed fuse,Inline fuse holder + 2 A fast fuse,1,in series with the diode; 0.5 mm2 wire is enough
+8,Distribution block,WAGO 221-415 (5-way) x2 or a 2-pole terminal block rated 24 A,1,+5 V and GND split to panels / controller branch / amplifier
+9,Ambient light sensor (optional),Adafruit VEML7700 (STEMMA QT) + 100 mm STEMMA QT cable,1,automatic brightness; keep away from the LEDs
+10,Front panel (optional),Smoked grey cast acrylic 3 mm (~21 % transmission e.g. PLEXIGLAS GS 7C83),1,glossy; no diffuser for crisp pixels; size see docs/enclosure.md
+11,HUB75 ribbon cables,2x8 IDC,2,usually included with the panels
+12,Remote power switch (optional),Shelly 1 Mini Gen3 or similar Wi-Fi relay,1,switches 230 V to the supply for a hard power cycle from Home Assistant
+13,PSU enclosure,Closed plastic junction box approx. 220x170x80 mm with M20 cable glands (IP54),1,holds supply + relay; strain relief on all cables; earth connected
+14,Wall mount,Keyhole hanger plates (flush routed),2,in the back edges of the end pieces; no extra depth
+15,Panel carrier,Aluminium flat bar 20x3 mm,2,length = case width - 36 mm; screwed to the panels' M3 inserts
+16,Back panel,Black HDF or aluminium composite 3 mm,1,851x270 mm at the default size; magnets or turn buttons
+17,Case wood,Solid oak 1000x300x18 mm,1,cut list in docs/enclosure.md

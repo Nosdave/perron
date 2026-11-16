@@ -6,7 +6,7 @@
 |---|---|
 | Display | 3 × 64×64 RGB HUB75 panels, 4 mm pitch (P4), 1/32 scan → 192×64 px, 768 × 256 mm |
 | Controller | Adafruit MatrixPortal S3 (ESP32-S3, 8 MB flash, 2 MB PSRAM) |
-| Power | 5 V / 30 A supply (e.g. Mean Well LRS-150-5) with a 25 A inline fuse |
+| Power | 5 V supply (e.g. Mean Well LRS-150-5, 22 A) with a 20 A inline fuse |
 | Optional | VEML7700 ambient light sensor, smoked acrylic front panel |
 
 Bill of materials: [`hardware/bom.csv`](../hardware/bom.csv)
@@ -21,18 +21,37 @@ Bill of materials: [`hardware/bom.csv`](../hardware/bom.csv)
 
 ## Power
 
-- Adjust the supply to **5.0–5.1 V** without load before connecting panels.
-- Wire **one red/black pair per panel** directly from the supply (star wiring, 14–12 AWG).
-- Put the **inline fuse** (25 A with 12 AWG, 20 A with 14 AWG) on the +5 V line right after the supply.
-- Connect protective earth and keep the mains terminals covered.
-- Worst case (full white) is ~24 A; at typical brightness the board draws 3–8 A.
+- Adjust the supply to **5.1–5.2 V** without load before connecting panels (compensates the drop
+  on the feed cable).
+- Run a **2 × 4 mm² trunk** with a **20 A inline fuse** right after the supply to a distribution
+  block inside the case, then **one red/black pair per panel** from there (star wiring).
+- Keep the mains terminals inside a closed box and connect protective earth. A Wi-Fi relay in
+  that box (e.g. Shelly) gives Home Assistant a hard power cycle.
+- Full white would draw ~24 A, more than the LRS-150-5 delivers. Real content at normal
+  brightness draws 3–8 A; keep the configured maximum brightness reasonable.
 
 ### Powering the controller
 
-Power the MatrixPortal **through USB-C** (phone charger or a USB-C pigtail from the 5 V supply).
-Do **not** feed 5 V into its screw terminals: they are wired directly to USB VBUS and are meant
-as an output. Feeding them and plugging in a computer at the same time can damage the board or
-the computer (Adafruit documentation). Ground is shared through the HUB75 ribbon.
+The MatrixPortal's **+5V screw terminal is wired directly to USB VBUS** (no diode, no switch).
+Feed it from the supply **through a Schottky diode and a 2 A fuse**:
+
+```
+PSU +5V ─┬──────────────────────────────► panels (star wiring)
+         ├──────────────────────────────► amplifier Vin
+         └──[2 A fuse]──►|── MatrixPortal +5V terminal
+                     1N5822 / SS34 (ring towards the MatrixPortal)
+PSU GND ───── panels, amplifier, MatrixPortal GND terminal (common ground)
+```
+
+- The diode blocks USB VBUS: a computer plugged in for service powers only the controller and
+  can never feed the panels or push current into the supply.
+- 3 A rating, ~0.4 V drop: the controller gets ~4.7–4.8 V, plenty for its 3.3 V regulator.
+  Typical draw is 0.3 A, up to ~1 A with case fans on the A0 socket.
+- **Never connect the panels to the MatrixPortal terminals.** Power them from the supply only.
+- With USB plugged in, the computer supplies the controller and its fans (5 V beats the 4.7 V
+  behind the diode). USB ports deliver 0.5–0.9 A and shut down safely on overload.
+
+Enclosure, wall mount and supply box: [`enclosure.md`](enclosure.md)
 
 ## Ambient light sensor (optional)
 

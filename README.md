@@ -35,7 +35,7 @@ information — in the visual language of the operators, running entirely on its
 | 5 V / 30 A power supply | with inline fuse, star wiring to each panel |
 | VEML7700 light sensor | optional, plug-and-play via STEMMA QT |
 
-Full parts list: [`hardware/bom.csv`](hardware/bom.csv) · wiring and assembly: [docs/hardware.md](docs/hardware.md)
+Full parts list: [`hardware/bom.csv`](hardware/bom.csv) · wiring and assembly: [docs/hardware.md](docs/hardware.md) · enclosure: [docs/enclosure.md](docs/enclosure.md)
 
 ## Getting started
 
