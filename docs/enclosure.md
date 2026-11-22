@@ -1,30 +1,37 @@
 # Enclosure
 
-A slim wooden frame (~45 mm deep) with a smoked acrylic front, slotted side grilles for the
-speaker and the sensors, a removable back and a separate box for the mains supply.
+A slim wooden frame (~45 mm deep) with a smoked acrylic front across the full inner width, a
+removable back and a separate box for the mains supply. Nothing but wood and glass is visible
+from the front: the speaker fires downwards and the fan breathes through slots in the top and
+bottom rail.
 
 ## Dimensions
 
 | | Value |
 |---|---|
-| Panel field / front opening | 770 × 258 mm (768 × 256 + 1 mm tolerance per side) |
+| Panel field | 770 × 258 mm (768 × 256 + 1 mm tolerance per side), centred |
 | Frame | solid wood 18 mm, 45 mm deep, mitred with splines, 18 mm visible rim |
 | Outer size | **W** × 294 × 45 mm, default W = 875 mm |
-| Side grille width | (W − 806) / 2 per side, 34.5 mm at W = 875 |
-| Acrylic | 780 × 268 × 3 mm, in a 3.5 × 5.5 mm groove 3 mm behind the front face |
-| Back panel | 851 × 270 × 3 mm (black HDF or aluminium composite) in a 6 × 4 mm rebate |
+| Side zones | (W − 806) / 2 per side behind the glass, 34.5 mm at W = 875, blacked out |
+| Acrylic | (W − 26) × 268 × 3 mm, in a 3.5 × 5.5 mm groove 3 mm behind the front face, all round |
+| Back panel | (W − 24) × 270 × 3 mm (black HDF or aluminium composite) in a 6 × 4 mm rebate |
 
 Measure W on site; everything else stays fixed.
 
 ## Cut list (one board 1000 × 300 × 18 mm)
 
-Rip three 45 mm strips and one 75 mm strip.
+Rip three 45 mm strips and one narrow strip for the blocks.
 
 | Part | Qty | Size (mm) | Notes |
 |---|---|---|---|
-| Top / bottom rail | 2 | W × 45 × 18 | mitred; groove for acrylic; vent slots in the grille zones |
-| End piece | 2 | 294 × 45 × 18 | mitred; flush keyhole hanger in the back edge; cable hole Ø 12 in one |
-| Side grille | 2 | 258 × grille width × 10 | planed from 18 mm; three 3 × 220 mm slots; acrylic groove on the inner edge |
+| Top rail | 1 | W × 45 × 18 | mitred; groove; 4 exhaust slots 3 × 25 in the fan-side zone |
+| Bottom rail | 1 | W × 45 × 18 | mitred; groove; 6 speaker slots 3 × 25 on one side, 4 intake slots on the other |
+| End piece | 2 | 294 × 45 × 18 | mitred; groove; flush keyhole hanger in the back edge; cable hole Ø 12 in one |
+| Carrier block | 4 | ~30 × 20 × 18 | glued inside the end pieces, carry the panel bars |
+| Side mask | 2 | 256 × 34 × 3 | black HDF right behind the glass; cut-out for the speaker, Ø 8 hole for the light sensor |
+
+The acrylic is captive in the groove once the frame is glued; panels and electronics stay
+serviceable from the back.
 
 ## Inside
 
@@ -33,13 +40,12 @@ front ─ acrylic (3–6 mm) ─ panels (≈6.5–21.5 mm) ─ MatrixPortal on p
 ```
 
 - **Panel carrier:** two aluminium flat bars 20 × 3 mm, W − 36 mm long, screwed to the panels'
-  M3 inserts and to small blocks glued inside the end pieces. The panels press the acrylic into
-  its groove; the back panel carries no load.
-- **Side compartments** (behind the grilles, ~31 mm deep): speaker (≤ 30 mm, front-firing,
-  sealed back) on one side; light sensor behind a Ø 3 mm hole, temperature sensor and a 30 mm
-  fan on the other side.
-- **Airflow:** four 3 × 25 mm slots in the bottom rail (intake) and in the top rail (exhaust),
-  only in the grille zones so they are invisible from the front.
+  M3 inserts and to the carrier blocks. The panels press the acrylic into its groove; the back
+  panel carries no load.
+- **Side zones** (~34 × 35 mm, behind the black masks): speaker (≤ 30 mm, sealed back) lying
+  flat and firing down through the bottom-rail slots on one side; light sensor pressed against
+  the glass, temperature sensor and a 30 mm fan on the other side. Set **Front panel light
+  transmission** to the acrylic's value so the sensor reading is corrected.
 - **Power:** the 2 × 4 mm² trunk enters through one end piece to a distribution block; diode
   branch to the controller as described in [`hardware.md`](hardware.md#powering-the-controller).
 - **Back panel:** held by magnets or turn buttons; cut out a 40 × 25 mm window over the

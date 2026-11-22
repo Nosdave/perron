@@ -8,11 +8,11 @@ pos,part,specification,qty,notes
 7,Controller feed fuse,Inline fuse holder + 2 A fast fuse,1,in series with the diode; 0.5 mm2 wire is enough
 8,Distribution block,WAGO 221-415 (5-way) x2 or a 2-pole terminal block rated 24 A,1,+5 V and GND split to panels / controller branch / amplifier
 9,Ambient light sensor (optional),Adafruit VEML7700 (STEMMA QT) + 100 mm STEMMA QT cable,1,automatic brightness; keep away from the LEDs
-10,Front panel (optional),Smoked grey cast acrylic 3 mm (~21 % transmission e.g. PLEXIGLAS GS 7C83),1,glossy; no diffuser for crisp pixels; size see docs/enclosure.md
+10,Front panel (optional),Smoked grey cast acrylic 3 mm (~21 % transmission e.g. PLEXIGLAS GS 7C83),1,glossy; no diffuser for crisp pixels; full inner width (case width - 26) x 268 mm see docs/enclosure.md
 11,HUB75 ribbon cables,2x8 IDC,2,usually included with the panels
 12,Remote power switch (optional),Shelly 1 Mini Gen3 or similar Wi-Fi relay,1,switches 230 V to the supply for a hard power cycle from Home Assistant
 13,PSU enclosure,Closed plastic junction box approx. 220x170x80 mm with M20 cable glands (IP54),1,holds supply + relay; strain relief on all cables; earth connected
 14,Wall mount,Keyhole hanger plates (flush routed),2,in the back edges of the end pieces; no extra depth
 15,Panel carrier,Aluminium flat bar 20x3 mm,2,length = case width - 36 mm; screwed to the panels' M3 inserts
-16,Back panel,Black HDF or aluminium composite 3 mm,1,851x270 mm at the default size; magnets or turn buttons
+16,Back panel,Black HDF or aluminium composite 3 mm,1,851x270 mm at the default size; magnets or turn buttons; offcut for the two side masks
 17,Case wood,Solid oak 1000x300x18 mm,1,cut list in docs/enclosure.md
